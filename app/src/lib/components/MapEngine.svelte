@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
@@ -50,6 +50,89 @@
 			duration: 1200,
 			easing: (t) => t * (2 - t)
 		});
+	}
+
+	function applyLegendFilter(filters) {
+		if (!map || !$dataLoaded) return;
+
+		const step = STORY_STEPS[$currentStep];
+		if (!step) return;
+
+		const colorMode = step.colorMode ?? 'default';
+		const active = filters === null
+			? (step.legendLayers ? new Set(step.legendLayers.map(l => l.id)) : new Set())
+			: filters;
+
+		// 1. Reset all filters if filters are null (switching steps or "show all")
+		if (filters === null) {
+			map.setFilter('parking-lines-method', null);
+			map.setFilter('parking-lines-signage', null);
+			map.setFilter('corridors-line', null);
+			map.setFilter('corridor-boundaries-fill', null);
+			map.setFilter('corridor-boundaries-outline', null);
+		}
+
+		// 2. Handle Corridor Mode (Check this before default colorMode because it has colorMode: 'default' but special layers)
+		if (step.showCorridors) {
+			const idToName = { 'corridor-1': 'Corridor 01', 'corridor-2': 'Corridor 02', 'corridor-3': 'Corridor 03' };
+			const selected = step.legendLayers
+				.filter(l => active.has(l.id))
+				.map(l => idToName[l.id])
+				.filter(Boolean);
+			
+			const f = selected.length === 0
+				? ['==', ['get', 'name'], '__none__']
+				: ['in', ['get', 'name'], ['literal', selected]];
+			
+			map.setFilter('corridors-line', f);
+			map.setFilter('corridor-boundaries-fill', f);
+			map.setFilter('corridor-boundaries-outline', f);
+			return; // Corridor step is handled
+		}
+
+		// 3. Handle Method/Signage modes
+		if (colorMode === 'method') {
+			const idToMethod = { 'parallel': 'parallel', 'angle-90': '90', 'angle-45': '45' };
+			const selected = step.legendLayers
+				.filter(l => active.has(l.id))
+				.map(l => idToMethod[l.id])
+				.filter(Boolean);
+			map.setFilter('parking-lines-method', selected.length === 0 ? ['==', ['get', 'method'], '__none__'] : ['in', ['get', 'method'], ['literal', selected]]);
+			return;
+		}
+
+		if (colorMode === 'signage') {
+			const idToSignage = { 'signed': 'yes', 'unsigned': 'no' };
+			const selected = step.legendLayers
+				.filter(l => active.has(l.id))
+				.map(l => idToSignage[l.id])
+				.filter(Boolean);
+			map.setFilter('parking-lines-signage', selected.length === 0 ? ['==', ['get', 'signage'], '__none__'] : ['in', ['get', 'signage'], ['literal', selected]]);
+			return;
+		}
+
+		// 4. Handle Default Mode (Direct visibility toggles)
+		if (colorMode === 'default' && step.legendLayers) {
+			for (const layer of step.legendLayers) {
+				if (!layer.layerId) continue;
+				const vis = active.has(layer.id) ? 'visible' : 'none';
+				
+				// Standard visibility toggle
+				map.setLayoutProperty(layer.layerId, 'visibility', vis);
+
+				// Paired/secondary layers
+				if (layer.layerId === 'parking-lines') {
+					// Ensure we don't accidentally show lines if the step itself says showLines: false
+					if (!step.showLines) map.setLayoutProperty('parking-lines', 'visibility', 'none');
+				}
+				if (layer.layerId === 'parking-areas-fill') {
+					map.setLayoutProperty('parking-areas-outline', 'visibility', step.showAreas ? vis : 'none');
+				}
+				if (layer.layerId === 'landmarks-points') {
+					map.setLayoutProperty('landmarks-labels', 'visibility', step.showLandmarks ? vis : 'none');
+				}
+			}
+		}
 	}
 
 	onMount(async () => {
@@ -206,6 +289,14 @@
 		const step = $currentStep;
 		if (map && $dataLoaded) {
 			applyStepVisibility(step);
+		}
+	});
+
+	// React to legend filter toggles
+	$effect(() => {
+		const filters = $activeLegendFilters;
+		if (map && $dataLoaded) {
+			applyLegendFilter(filters);
 		}
 	});
 </script>

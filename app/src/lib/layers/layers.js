@@ -1,3 +1,18 @@
+// Invisible wide hit area for clicking parking lines
+export const PARKING_LINES_HIT = {
+	id: 'parking-lines-hit',
+	type: 'line',
+	source: 'parking-lines',
+	paint: {
+		'line-color': 'transparent',
+		'line-width': 16,
+		'line-opacity': 0
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
 // Parking lines — on-street segments
 export const PARKING_LINES = {
 	id: 'parking-lines',
@@ -25,7 +40,7 @@ export const PARKING_LINES_METHOD = {
 			'parallel', '#4CAF50',
 			'90', '#FF9800',
 			'45', '#E91E63',
-			'#888888'
+			'#4CAF50'
 		],
 		'line-width': 3.5,
 		'line-opacity': 0.9
@@ -56,6 +71,93 @@ export const PARKING_LINES_SIGNAGE = {
 	}
 };
 
+// Marking-colored lines
+export const PARKING_LINES_MARKING = {
+	id: 'parking-lines-marking',
+	type: 'line',
+	source: 'parking-lines',
+	paint: {
+		'line-color': [
+			'match',
+			['get', 'marking'],
+			'yes', '#4CAF50',
+			/* default / no */ '#EF5350'
+		],
+		'line-width': 3.5,
+		'line-opacity': 0.9
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
+// Location-colored lines
+export const PARKING_LINES_LOCATION = {
+	id: 'parking-lines-location',
+	type: 'line',
+	source: 'parking-lines',
+	paint: {
+		'line-color': [
+			'match',
+			['get', 'location'],
+			'on-street', '#42a5f5',
+			'pocket', '#ab47bc',
+			'set-back', '#ffaa00',
+			'#42a5f5'
+		],
+		'line-width': 3.5,
+		'line-opacity': 0.9
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
+// Color-zone-colored lines
+export const PARKING_LINES_COLOR = {
+	id: 'parking-lines-color',
+	type: 'line',
+	source: 'parking-lines',
+	paint: {
+		'line-color': [
+			'match',
+			['get', 'color'],
+			'white', '#ffffff',
+			'red', '#EF5350',
+			'blue', '#42a5f5',
+			'black', '#888888',
+			'#666666'
+		],
+		'line-width': 3.5,
+		'line-opacity': 0.9
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
+// Impact-colored lines
+export const PARKING_LINES_IMPACT = {
+	id: 'parking-lines-impact',
+	type: 'line',
+	source: 'parking-lines',
+	paint: {
+		'line-color': [
+			'match',
+			['get', 'impact'],
+			'corridor', '#ffaa00',
+			'buffer', '#00aa00',
+			'yard', '#55aaff',
+			'#888888'
+		],
+		'line-width': 3.5,
+		'line-opacity': 0.9
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
 // Parking areas — off-street fill
 export const PARKING_AREAS_FILL = {
 	id: 'parking-areas-fill',
@@ -63,6 +165,27 @@ export const PARKING_AREAS_FILL = {
 	source: 'parking-areas',
 	paint: {
 		'fill-color': '#7c4dff',
+		'fill-opacity': 0.35
+	},
+	layout: {
+		visibility: 'none'
+	}
+};
+
+// Impact-colored areas
+export const PARKING_AREAS_FILL_IMPACT = {
+	id: 'parking-areas-fill-impact',
+	type: 'fill',
+	source: 'parking-areas',
+	paint: {
+		'fill-color': [
+			'match',
+			['get', 'impact'],
+			'corridor', '#ffaa00',
+			'buffer', '#00aa00',
+			'yard', '#55aaff',
+			'#7c4dff'
+		],
 		'fill-opacity': 0.35
 	},
 	layout: {
@@ -176,10 +299,16 @@ export const LANDMARKS_LABELS = {
 
 export const ALL_LAYERS = [
 	PARKING_AREAS_FILL,
+	PARKING_AREAS_FILL_IMPACT,
 	PARKING_AREAS_OUTLINE,
 	PARKING_LINES,
 	PARKING_LINES_METHOD,
 	PARKING_LINES_SIGNAGE,
+	PARKING_LINES_MARKING,
+	PARKING_LINES_LOCATION,
+	PARKING_LINES_COLOR,
+	PARKING_LINES_IMPACT,
+	PARKING_LINES_HIT,
 	CORRIDOR_BOUNDARIES_FILL,
 	CORRIDOR_BOUNDARIES_OUTLINE,
 	CORRIDORS_LINE,

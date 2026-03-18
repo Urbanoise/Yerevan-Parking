@@ -56,7 +56,7 @@
 		align-items: center;
 		justify-content: flex-start;
 		padding: 0 5vw;
-		pointer-events: auto;
+		pointer-events: none;
 		opacity: 0.3;
 		transition: opacity 0.4s ease;
 	}

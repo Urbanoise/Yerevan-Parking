@@ -10,3 +10,4 @@ export const showLines = writable(true);
 export const lightboxStore = writable(null);
 // null = all items active (no filter applied); Set = only these ids are active
 export const activeLegendFilters = writable(null);
+export const geojsonData = writable({ lines: null, areas: null });

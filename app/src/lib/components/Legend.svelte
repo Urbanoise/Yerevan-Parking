@@ -3,19 +3,33 @@
 	import { activeLegendFilters } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
-	let legendLayers = $derived(STORY_STEPS[$currentStep]?.legendLayers ?? []);
-	let legendVisible = $derived(STORY_STEPS[$currentStep]?.legendVisible ?? false);
+	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
+	let legendLayers = $derived(stepConfig.legendLayers || []);
+	let legendGroups = $derived(stepConfig.legendGroups || []);
+	let allLayers = $derived([...legendLayers, ...(legendGroups.flatMap(g => g.layers))]);
+	let legendVisible = $derived(stepConfig.legendVisible ?? false);
 
 	// Reset filters whenever the step changes
 	$effect(() => {
-		$currentStep;
-		activeLegendFilters.set(null);
+		const stepId = $currentStep;
+		const step = STORY_STEPS.find(s => s.index === stepId);
+		if (step) {
+			const activeLayers = [...(step.legendLayers || []), ...(step.legendGroups?.flatMap(g => g.layers) || [])];
+			if (activeLayers.some(l => l.activeByDefault !== undefined)) {
+				const defaults = activeLayers.filter(l => l.activeByDefault !== false).map(l => l.id);
+				activeLegendFilters.set(new Set(defaults));
+			} else {
+				activeLegendFilters.set(null);
+			}
+		} else {
+			activeLegendFilters.set(null);
+		}
 	});
 
 	function toggle(id) {
 		activeLegendFilters.update((current) => {
 			// Start from a full set if null
-			const all = new Set(legendLayers.map((l) => l.id));
+			const all = new Set(allLayers.map((l) => l.id));
 			const active = current === null ? new Set(all) : new Set(current);
 
 			if (active.has(id)) {
@@ -37,19 +51,36 @@
 	}
 </script>
 
-{#if legendVisible && legendLayers.length > 0}
+{#if legendVisible && allLayers.length > 0}
 	<div class="legend-panel">
 		<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
-		{#each legendLayers as layer}
-			<button
-				class="legend-item"
-				class:inactive={!isActive(layer.id)}
-				onclick={() => toggle(layer.id)}
-				title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
-			>
-				<span class="legend-swatch" style="background-color: {layer.color}"></span>
-				<span class="legend-label">{layer.label}</span>
-			</button>
+		{#if legendLayers.length > 0}
+			{#each legendLayers as layer}
+				<button
+					class="legend-item"
+					class:inactive={!isActive(layer.id)}
+					onclick={() => toggle(layer.id)}
+					title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
+				>
+					<span class="legend-swatch" style="background-color: {layer.color}"></span>
+					<span class="legend-label">{layer.label}</span>
+				</button>
+			{/each}
+		{/if}
+
+		{#each legendGroups as group}
+			<div class="legend-group-title">{group.title}</div>
+			{#each group.layers as layer}
+				<button
+					class="legend-item"
+					class:inactive={!isActive(layer.id)}
+					onclick={() => toggle(layer.id)}
+					title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
+				>
+					<span class="legend-swatch" style="background-color: {layer.color}"></span>
+					<span class="legend-label">{layer.label}</span>
+				</button>
+			{/each}
 		{/each}
 	</div>
 {/if}
@@ -86,6 +117,15 @@
 		letter-spacing: 0;
 		color: rgba(255, 255, 255, 0.22);
 		font-style: italic;
+	}
+
+	.legend-group-title {
+		font-size: 0.65rem;
+		color: rgba(255, 255, 255, 0.5);
+		text-transform: uppercase;
+		margin-top: 14px;
+		margin-bottom: 6px;
+		font-weight: 500;
 	}
 
 	.legend-item {

@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
@@ -24,10 +24,21 @@
 			showL && colorMode === 'method' ? 'visible' : 'none');
 		map.setLayoutProperty('parking-lines-signage', 'visibility',
 			showL && colorMode === 'signage' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-lines-marking', 'visibility',
+			showL && colorMode === 'marking' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-lines-location', 'visibility',
+			showL && colorMode === 'location' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-lines-color', 'visibility',
+			showL && colorMode === 'color' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-lines-impact', 'visibility',
+			showL && colorMode === 'impact' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-lines-hit', 'visibility',
+			showL ? 'visible' : 'none');
 
 		// Areas
 		const showA = s.showAreas ?? false;
-		map.setLayoutProperty('parking-areas-fill', 'visibility', showA ? 'visible' : 'none');
+		map.setLayoutProperty('parking-areas-fill', 'visibility', showA && colorMode !== 'impact' ? 'visible' : 'none');
+		map.setLayoutProperty('parking-areas-fill-impact', 'visibility', showA && colorMode === 'impact' ? 'visible' : 'none');
 		map.setLayoutProperty('parking-areas-outline', 'visibility', showA ? 'visible' : 'none');
 
 		// Corridors
@@ -59,14 +70,23 @@
 		if (!step) return;
 
 		const colorMode = step.colorMode ?? 'default';
+		const stepLayers = [...(step.legendLayers || []), ...(step.legendGroups?.flatMap(g => g.layers) || [])];
 		const active = filters === null
-			? (step.legendLayers ? new Set(step.legendLayers.map(l => l.id)) : new Set())
+			? new Set(stepLayers.map(l => l.id))
 			: filters;
 
 		// 1. Reset all filters if filters are null (switching steps or "show all")
 		if (filters === null) {
 			map.setFilter('parking-lines-method', null);
 			map.setFilter('parking-lines-signage', null);
+			map.setFilter('parking-lines-marking', null);
+			map.setFilter('parking-lines-location', null);
+			map.setFilter('parking-lines-color', null);
+			map.setFilter('parking-lines-impact', null);
+			map.setFilter('parking-areas-fill', null);
+			map.setFilter('parking-areas-fill-impact', null);
+			map.setFilter('parking-areas-outline', null);
+			map.setFilter('parking-lines-hit', null);
 			map.setFilter('corridors-line', null);
 			map.setFilter('corridor-boundaries-fill', null);
 			map.setFilter('corridor-boundaries-outline', null);
@@ -75,7 +95,7 @@
 		// 2. Handle Corridor Mode (Check this before default colorMode because it has colorMode: 'default' but special layers)
 		if (step.showCorridors) {
 			const idToName = { 'corridor-1': 'Corridor 01', 'corridor-2': 'Corridor 02', 'corridor-3': 'Corridor 03' };
-			const selected = step.legendLayers
+			const selected = stepLayers
 				.filter(l => active.has(l.id))
 				.map(l => idToName[l.id])
 				.filter(Boolean);
@@ -90,30 +110,93 @@
 			return; // Corridor step is handled
 		}
 
-		// 3. Handle Method/Signage modes
-		if (colorMode === 'method') {
-			const idToMethod = { 'parallel': 'parallel', 'angle-90': '90', 'angle-45': '45' };
-			const selected = step.legendLayers
-				.filter(l => active.has(l.id))
-				.map(l => idToMethod[l.id])
-				.filter(Boolean);
-			map.setFilter('parking-lines-method', selected.length === 0 ? ['==', ['get', 'method'], '__none__'] : ['in', ['get', 'method'], ['literal', selected]]);
+		const propertyMap = {
+			'color': { 'white': 'white', 'red': 'red', 'blue': 'blue', 'black': 'black' },
+			'method': { 'parallel': 'parallel', '90': '90', '45': '45' },
+			'signage': { 'yes': 'yes', 'no': 'no' },
+			'marking': { 'yes': 'yes', 'no': 'no' },
+			'location': { 'on-street': 'on-street', 'pocket': 'pocket', 'set-back': 'set-back' }
+		};
+
+		if (propertyMap[colorMode]) {
+			const idToPrimary = propertyMap[colorMode];
+			const idToImpact = { 'corridor': 'corridor', 'buffer': 'buffer', 'yard': 'yard' };
+			
+			const selectedPrimary = stepLayers
+				.filter(l => active.has(l.id) && idToPrimary[l.id])
+				.map(l => idToPrimary[l.id]);
+				
+			const selectedImpacts = stepLayers
+				.filter(l => active.has(l.id) && idToImpact[l.id])
+				.map(l => idToImpact[l.id]);
+
+			let pFilter;
+			if (selectedPrimary.length === 0) {
+				pFilter = ['==', ['get', colorMode], '__none__'];
+			} else {
+				if ((colorMode === 'signage' || colorMode === 'marking')) {
+					// Logic for boolean: yes/no, where no represents unset values as well
+					if (selectedPrimary.includes('yes') && selectedPrimary.includes('no')) {
+						pFilter = ['!=', ['get', colorMode], '__none__'];
+					} else if (selectedPrimary.includes('no')) {
+						pFilter = ['!=', ['get', colorMode], 'yes'];
+					} else if (selectedPrimary.includes('yes')) {
+						pFilter = ['==', ['get', colorMode], 'yes'];
+					}
+				} else if (colorMode === 'method') {
+					if (selectedPrimary.includes('parallel')) {
+						const unselected = ['90', '45'].filter(id => !selectedPrimary.includes(id));
+						pFilter = unselected.length > 0 ? ['!', ['in', ['get', colorMode], ['literal', unselected]]] : ['!=', ['get', colorMode], '__none__'];
+					} else {
+						pFilter = ['in', ['get', colorMode], ['literal', selectedPrimary]];
+					}
+				} else if (colorMode === 'location') {
+					if (selectedPrimary.includes('on-street')) {
+						const unselected = ['pocket', 'set-back'].filter(id => !selectedPrimary.includes(id));
+						pFilter = unselected.length > 0 ? ['!', ['in', ['get', colorMode], ['literal', unselected]]] : ['!=', ['get', colorMode], '__none__'];
+					} else {
+						pFilter = ['in', ['get', colorMode], ['literal', selectedPrimary]];
+					}
+				} else {
+					pFilter = ['in', ['get', colorMode], ['literal', selectedPrimary]];
+				}
+			}
+
+			const iFilter = selectedImpacts.length === 0 ? ['==', ['get', 'impact'], '__none__'] : ['in', ['get', 'impact'], ['literal', selectedImpacts]];
+			
+			const hasImpactOptions = stepLayers.some(l => idToImpact[l.id]);
+			const finalFilter = hasImpactOptions ? ['all', pFilter, iFilter] : pFilter;
+
+			const targetLayer = `parking-lines-${colorMode}`;
+			map.setFilter(targetLayer, finalFilter);
+			map.setFilter('parking-lines-hit', finalFilter);
+			
+			// Handle parking-areas (implicitly white and yard, lacks marking/signage)
+			if (hasImpactOptions) {
+				const primaryAllowsArea = colorMode === 'color' ? selectedPrimary.includes('white') : true;
+				const showAreasImplicitly = primaryAllowsArea && selectedImpacts.includes('yard');
+				const areaFilter = showAreasImplicitly ? null : ['==', '1', '2']; // hidden if false
+				map.setFilter('parking-areas-fill', areaFilter);
+				map.setFilter('parking-areas-outline', areaFilter);
+			}
 			return;
 		}
 
-		if (colorMode === 'signage') {
-			const idToSignage = { 'signed': 'yes', 'unsigned': 'no' };
+		if (colorMode === 'impact') {
 			const selected = step.legendLayers
 				.filter(l => active.has(l.id))
-				.map(l => idToSignage[l.id])
-				.filter(Boolean);
-			map.setFilter('parking-lines-signage', selected.length === 0 ? ['==', ['get', 'signage'], '__none__'] : ['in', ['get', 'signage'], ['literal', selected]]);
+				.map(l => l.id);
+			const iFilter = selected.length === 0 ? ['==', ['get', 'impact'], '__none__'] : ['in', ['get', 'impact'], ['literal', selected]];
+			map.setFilter('parking-lines-impact', iFilter);
+			map.setFilter('parking-areas-fill-impact', iFilter);
+			map.setFilter('parking-areas-outline', iFilter);
+			map.setFilter('parking-lines-hit', iFilter);
 			return;
 		}
 
 		// 4. Handle Default Mode (Direct visibility toggles)
-		if (colorMode === 'default' && step.legendLayers) {
-			for (const layer of step.legendLayers) {
+		if (colorMode === 'default' && stepLayers.length > 0) {
+			for (const layer of stepLayers) {
 				if (!layer.layerId) continue;
 				const vis = active.has(layer.id) ? 'visible' : 'none';
 				
@@ -197,36 +280,51 @@
 			for (const layer of ALL_LAYERS) {
 				map.addLayer(layer);
 			}
+			
+			geojsonData.set({
+				lines: linesData.features,
+				areas: areasData.features
+			});
 
-			// Popups for parking lines
-			map.on('click', 'parking-lines', (e) => {
+			// Shared popup builder for parking features
+			function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+			function showParkingPopup(e, color) {
 				if (!e.features?.length) return;
 				const p = e.features[0].properties;
+				const rows = [];
+				if (p.snippet) rows.push(`<div style="font-size:11px;opacity:0.6;margin-bottom:2px">${p.snippet}</div>`);
+				if (p.space) rows.push(`<div>Spaces: <strong>${p.space}</strong></div>`);
+				if (p.method) rows.push(`<div>Method: ${cap(p.method)}</div>`);
+				if (p.location) rows.push(`<div>Location: ${cap(p.location)}</div>`);
+				if (p.marking) rows.push(`<div>Marking: ${cap(p.marking)}</div>`);
+				if (p.signage) rows.push(`<div>Signage: ${cap(p.signage)}</div>`);
+				if (p.administration) rows.push(`<div>Administration: ${cap(p.administration)}</div>`);
+				if (p.impact) rows.push(`<div>Impact: ${cap(p.impact)}</div>`);
 				const el = document.createElement('div');
 				el.className = 'map-popup';
 				el.innerHTML = `
-					<div style="font-weight:600;color:#42a5f5;margin-bottom:4px">${p.name}</div>
-					${p.spaces > 0 ? `<div>Spaces: <strong>${p.spaces}</strong></div>` : ''}
-					${p.method !== 'unknown' ? `<div>Method: ${p.method}</div>` : ''}
-					${p.location !== 'unknown' ? `<div>Location: ${p.location}</div>` : ''}
-					${p.signage !== 'unknown' ? `<div>Signage: ${p.signage}</div>` : ''}
+					<div style="font-weight:600;color:${color};margin-bottom:4px">${p.name}</div>
+					${rows.join('')}
 				`;
-				new maplibregl.default.Popup({ closeButton: true, maxWidth: '240px' })
+				new maplibregl.default.Popup({ closeButton: true, maxWidth: '260px' })
 					.setLngLat(e.lngLat)
 					.setDOMContent(el)
 					.addTo(map);
-			});
+			}
+
+			// Popups for parking lines (via hit layer for reliable clicking)
+			map.on('click', 'parking-lines-hit', (e) => showParkingPopup(e, '#42a5f5'));
 
 			// Popups for parking areas
-			map.on('click', 'parking-areas-fill', (e) => {
+			map.on('click', 'parking-areas-fill', (e) => showParkingPopup(e, '#7c4dff'));
+
+			// Popups for corridors
+			map.on('click', 'corridors-line', (e) => {
 				if (!e.features?.length) return;
 				const p = e.features[0].properties;
 				const el = document.createElement('div');
 				el.className = 'map-popup';
-				el.innerHTML = `
-					<div style="font-weight:600;color:#7c4dff;margin-bottom:4px">${p.name}</div>
-					${p.spaces > 0 ? `<div>Spaces: <strong>${p.spaces}</strong></div>` : ''}
-				`;
+				el.innerHTML = `<div style="font-weight:600;color:#ffaa00;margin-bottom:4px">${p.name}</div>`;
 				new maplibregl.default.Popup({ closeButton: true, maxWidth: '220px' })
 					.setLngLat(e.lngLat)
 					.setDOMContent(el)
@@ -250,14 +348,14 @@
 			});
 
 			// Hover cursors
-			for (const layerId of ['parking-lines', 'parking-lines-method', 'parking-lines-signage', 'parking-areas-fill', 'landmarks-points']) {
+			for (const layerId of ['parking-lines-hit', 'parking-areas-fill', 'landmarks-points', 'corridors-line']) {
 				map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
 				map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
 			}
 
 			// Line hover highlight
 			let hoveredLineId = null;
-			for (const layerId of ['parking-lines', 'parking-lines-method', 'parking-lines-signage']) {
+			for (const layerId of ['parking-lines-hit']) {
 				map.on('mousemove', layerId, (e) => {
 					if (e.features?.length) {
 						if (hoveredLineId !== null) {

@@ -1,38 +1,139 @@
 <script>
 	import { onMount } from 'svelte';
+	import { tweened } from 'svelte/motion';
+	import { cubicOut } from 'svelte/easing';
+
+	import { activeLegendFilters, geojsonData } from '$lib/stores/mapStore.js';
+	import { currentStep } from '$lib/stores/storyStore.js';
 
 	let { step } = $props();
 
 	let statEls = $state([]);
 
-	onMount(async () => {
-		if (!step.stats?.length) return;
-		const { gsap } = await import('gsap');
+	let dynamicStats = $derived.by(() => {
+		// Only run dynamic calculation on steps that have legendGroups configured with an Impact Area toggle
+		if (step.legendGroups && step.legendGroups[1]?.title === 'Impact Area' && $geojsonData.lines) {
+			// Only apply filter restrictions when THIS step is the current step.
+			// For non-current steps, treat all legends as active (null = show all).
+			const activeLayers = ($currentStep === step.index) ? $activeLegendFilters : null;
+			
+			const primaryGroup = step.legendGroups[0];
+			const primaryMode = step.colorMode; // 'color', 'method', 'signage', 'marking', 'location'
+			
+			const propertyMap = {
+				'color': { 'white': 'white', 'red': 'red', 'blue': 'blue', 'black': 'black' },
+				'method': { 'parallel': 'parallel', '90': '90', '45': '45' },
+				'signage': { 'yes': 'yes', 'no': 'no' },
+				'marking': { 'yes': 'yes', 'no': 'no' },
+				'location': { 'on-street': 'on-street', 'pocket': 'pocket', 'set-back': 'set-back' }
+			};
+			const primaryMap = propertyMap[primaryMode];
+			
+			if (!primaryMap) return step.stats || [];
 
-		// Animate stat counters when component mounts
+			// Determine which primary values are active
+			const allowedPrimary = new Set();
+			if (activeLayers === null) {
+				primaryGroup.layers.forEach(l => allowedPrimary.add(primaryMap[l.id]));
+			} else {
+				primaryGroup.layers.forEach(l => {
+					if (activeLayers.has(l.id)) allowedPrimary.add(primaryMap[l.id]);
+				});
+			}
+
+			// Determine which impact values are active
+			const allowedImpacts = new Set();
+			if (activeLayers === null) {
+				allowedImpacts.add('corridor').add('buffer').add('yard');
+			} else {
+				if (activeLayers.has('corridor')) allowedImpacts.add('corridor');
+				if (activeLayers.has('buffer')) allowedImpacts.add('buffer');
+				if (activeLayers.has('yard')) allowedImpacts.add('yard');
+			}
+			
+			// Initialize counts for each primary layer ID
+			const counts = {};
+			primaryGroup.layers.forEach(l => counts[l.id] = 0);
+			
+			const processFeature = (f) => {
+				const impact = f.properties.impact;
+				const space = parseInt(f.properties.space) || 0;
+				if (!allowedImpacts.has(impact)) return;
+				
+				let propVal = f.properties[primaryMode];
+				// Force-alias undefined and minor edge cases into standard legacy buckets
+				if ((primaryMode === 'signage' || primaryMode === 'marking') && propVal !== 'yes') {
+					propVal = 'no';
+				} else if (primaryMode === 'method' && propVal !== '90' && propVal !== '45') {
+					propVal = 'parallel';
+				} else if (primaryMode === 'location' && propVal !== 'pocket' && propVal !== 'set-back') {
+					propVal = 'on-street';
+				}
+
+				if (allowedPrimary.has(propVal)) {
+					// Identify which legend id this value corresponds to
+					const matchId = primaryGroup.layers.find(l => primaryMap[l.id] === propVal)?.id;
+					if (matchId) {
+						counts[matchId] += space;
+					}
+				}
+			};
+			
+			$geojsonData.lines.forEach(processFeature);
+			
+			// Process areas implicitly (they are visually 'yard' and conceptually 'white' or generic supply)
+			if (allowedImpacts.has('yard')) {
+				const primaryAllowsArea = primaryMode === 'color' ? allowedPrimary.has('white') : true;
+				if (primaryAllowsArea) {
+					// We attribute area spaces to the first primary label available, or specifically 'white' if color mode.
+					const targetId = primaryMode === 'color' ? 'white' : primaryGroup.layers[0]?.id;
+					
+					if (targetId && (activeLayers === null || activeLayers.has(targetId))) {
+						$geojsonData.areas.forEach(f => {
+							let spaceStr = f.properties.description?.value || '';
+							const match = spaceStr.match(/Space:\s*(\d+)/i);
+							if (match && counts[targetId] !== undefined) {
+								counts[targetId] += parseInt(match[1]) || 0;
+							}
+						});
+					}
+				}
+			}
+			
+			// Format the result cleanly as expected by the frontend
+			return primaryGroup.layers.map(l => ({
+				id: l.id,
+				value: counts[l.id],
+				label: l.label.replace(/\s*\([\d,]+\)/, ''), // clean off static numbers from legend text
+				color: l.color
+			}));
+		}
+		
+		return step.stats || [];
+	});
+
+	let isVisible = $state(false);
+	let animatedValues = tweened((step.stats || (step.legendGroups ? step.legendGroups[0].layers : [])).map(() => 0), { duration: 1500, easing: cubicOut });
+
+	$effect(() => {
+		if (isVisible && dynamicStats.length > 0) {
+			animatedValues.set(dynamicStats.map(s => s.value));
+		}
+	});
+
+	onMount(() => {
 		const observer = new IntersectionObserver((entries) => {
 			entries.forEach(entry => {
 				if (entry.isIntersecting) {
-					const el = entry.target;
-					const target = parseInt(el.dataset.target, 10);
-					gsap.fromTo(el, { innerText: 0 }, {
-						innerText: target,
-						duration: 1.5,
-						ease: 'power2.out',
-						snap: { innerText: 1 },
-						onUpdate() {
-							el.textContent = Math.round(parseFloat(el.innerText)).toLocaleString();
-						}
-					});
-					observer.unobserve(el);
+					isVisible = true;
+					observer.unobserve(entry.target);
 				}
 			});
 		}, { threshold: 0.5 });
 
-		// Wait for DOM
 		requestAnimationFrame(() => {
-			const els = document.querySelectorAll(`[data-step="${step.index}"] .stat-number`);
-			els.forEach(el => observer.observe(el));
+			const el = document.querySelector(`[data-step="${step.index}"]`);
+			if (el) observer.observe(el);
 		});
 
 		return () => observer.disconnect();
@@ -56,11 +157,11 @@
 				<p class="card-subtitle">{step.subtitle}</p>
 			{/if}
 
-			{#if step.stats?.length}
+			{#if dynamicStats.length}
 				<div class="stats-grid">
-					{#each step.stats as stat}
+					{#each dynamicStats as stat, i}
 						<div class="stat-item">
-							<span class="stat-number" data-target={stat.value} style="color: {stat.color}">0</span>
+							<span class="stat-number" style="color: {stat.color}">{Math.round($animatedValues[i] || 0).toLocaleString()}</span>
 							<span class="stat-label">{stat.label}</span>
 						</div>
 					{/each}
@@ -101,6 +202,7 @@
 		max-width: 90vw;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		transition: opacity 0.3s ease;
+		pointer-events: auto;
 	}
 
 	.story-card.intro {

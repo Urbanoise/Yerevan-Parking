@@ -149,6 +149,10 @@
 				<span class="scroll-arrow">&#8595;</span>
 				<span>Scroll to explore</span>
 			</div>
+			<a class="sts-brand" href="https://www.sts.com.ge" target="_blank" rel="noopener noreferrer">
+				<img class="sts-logo-img" src="/sts-logo.png" alt="STS logo" />
+				<span class="sts-label">created by STS</span>
+			</a>
 		</div>
 	{:else}
 		<div class="card-content">
@@ -209,6 +213,34 @@
 		width: 420px;
 		text-align: center;
 		padding: 48px 36px;
+	}
+
+	.sts-brand {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		margin-top: 28px;
+		text-decoration: none;
+		opacity: 0.7;
+		transition: opacity 0.2s ease;
+	}
+
+	.sts-brand:hover {
+		opacity: 1;
+	}
+
+	.sts-logo-img {
+		width: 120px;
+		height: auto;
+	}
+
+	.sts-label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 1.5px;
+		color: rgba(255, 255, 255, 0.45);
+		font-weight: 500;
 	}
 
 	.intro-title {

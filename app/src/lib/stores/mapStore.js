@@ -11,3 +11,5 @@ export const lightboxStore = writable(null);
 // null = all items active (no filter applied); Set = only these ids are active
 export const activeLegendFilters = writable(null);
 export const geojsonData = writable({ lines: null, areas: null });
+export const topLotsCount = writable(20);
+export const topLotsCategories = writable(new Set(['yard', 'commercial']));

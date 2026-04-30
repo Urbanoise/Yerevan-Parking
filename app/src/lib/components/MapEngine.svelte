@@ -1,12 +1,15 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
+	const MAX_TOP_LOTS = 50;
+
 	let mapContainer;
 	let map = null;
+	let topMarkers = [];
 
 	function applyStepVisibility(step) {
 		if (!map || !$dataLoaded) return;
@@ -40,6 +43,8 @@
 		map.setLayoutProperty('parking-areas-fill', 'visibility', showA && colorMode !== 'impact' ? 'visible' : 'none');
 		map.setLayoutProperty('parking-areas-fill-impact', 'visibility', showA && colorMode === 'impact' ? 'visible' : 'none');
 		map.setLayoutProperty('parking-areas-outline', 'visibility', showA ? 'visible' : 'none');
+
+		// Top off-street lot markers handled in a separate effect (reacts to slider too).
 
 		// Corridors
 		const showC = s.showCorridors ?? false;
@@ -270,6 +275,64 @@
 				fetch('/data/wgs84/landmarks.geojson').then(r => r.json()),
 			]);
 
+			// Parse "Space: N" from each area's HTML description into a numeric `space`
+			// property (so popups and labels can read it directly), then flag the top N
+			// lots by capacity for the highlight step.
+			for (const f of areasData.features) {
+				const html = f.properties.description?.value || '';
+				const m = html.match(/Space:\s*(\d+)/i);
+				f.properties.space = m ? parseInt(m[1], 10) : 0;
+				// Mall/City/Tonavachar in name = commercial; everything else (mostly Yard###) = yard.
+				f.properties.category = /mall|city|tonavachar/i.test(f.properties.name || '') ? 'commercial' : 'yard';
+			}
+			// All commercial lots pin regardless of size; yards are capped to top N by space.
+			const withSpace = areasData.features.filter(f => f.properties.space > 0);
+			const topYards = withSpace
+				.filter(f => f.properties.category === 'yard')
+				.sort((a, b) => b.properties.space - a.properties.space)
+				.slice(0, MAX_TOP_LOTS);
+			topYards.forEach((f, i) => {
+				f.properties.top = true;
+				f.properties.topRank = i + 1;
+			});
+			const commercials = withSpace.filter(f => f.properties.category === 'commercial');
+			commercials.forEach((f) => {
+				f.properties.top = true;
+				f.properties.topRank = 0; // commercials ignore the slider
+			});
+			const topFeatures = [...topYards, ...commercials];
+
+			// Always-on DOM markers for top lots — bbox center of the polygon as anchor.
+			for (const f of topFeatures) {
+				const ring = f.geometry.coordinates[0];
+				let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+				for (const c of ring) {
+					if (c[0] < minLng) minLng = c[0];
+					if (c[0] > maxLng) maxLng = c[0];
+					if (c[1] < minLat) minLat = c[1];
+					if (c[1] > maxLat) maxLat = c[1];
+				}
+				const center = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+
+				const el = document.createElement('div');
+				el.className = `top-lot-marker top-lot-marker--${f.properties.category}`;
+				el.style.display = 'none';
+				el.innerHTML = `
+					<div class="top-lot-pin"></div>
+					<div class="top-lot-card">
+						<span class="top-lot-name">${f.properties.name ?? ''}</span>
+						<span class="top-lot-spaces"><strong>${f.properties.space}</strong> spaces</span>
+					</div>
+				`;
+
+				const marker = new maplibregl.default.Marker({ element: el, anchor: 'bottom' })
+					.setLngLat(center)
+					.addTo(map);
+				marker._rank = f.properties.topRank;
+				marker._category = f.properties.category;
+				topMarkers.push(marker);
+			}
+
 			map.addSource('parking-lines', { type: 'geojson', data: linesData, generateId: true });
 			map.addSource('parking-areas', { type: 'geojson', data: areasData, generateId: true });
 			map.addSource('corridors', { type: 'geojson', data: corridorsData });
@@ -397,6 +460,21 @@
 			applyLegendFilter(filters);
 		}
 	});
+
+	// Top-lot marker visibility — depends on the active step, the slider value,
+	// and the category toggle set. Commercials ignore the slider; only yard rank is capped.
+	$effect(() => {
+		const step = $currentStep;
+		const count = $topLotsCount;
+		const cats = $topLotsCategories;
+		if (!map || !$dataLoaded) return;
+		const isTopStep = STORY_STEPS[step]?.colorMode === 'top';
+		for (const m of topMarkers) {
+			const passesRank = m._category === 'commercial' || m._rank <= count;
+			const visible = isTopStep && cats.has(m._category) && passesRank;
+			m.getElement().style.display = visible ? 'flex' : 'none';
+		}
+	});
 </script>
 
 <div class="map-container" bind:this={mapContainer}></div>
@@ -441,5 +519,61 @@
 
 	:global(.maplibregl-ctrl-group button) {
 		filter: invert(1);
+	}
+
+	:global(.top-lot-marker) {
+		--pin: #00e5ff;
+		display: flex;
+		align-items: flex-end;
+		gap: 6px;
+		font-family: 'Inter', sans-serif;
+		pointer-events: none;
+	}
+
+	:global(.top-lot-marker--commercial) {
+		--pin: #ff4dd2;
+	}
+
+	:global(.top-lot-pin) {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: var(--pin);
+		border: 2px solid #fff;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--pin) 25%, transparent), 0 2px 6px rgba(0, 0, 0, 0.55);
+		flex-shrink: 0;
+		margin-bottom: 6px;
+	}
+
+	:global(.top-lot-card) {
+		display: inline-flex;
+		flex-direction: column;
+		gap: 2px;
+		background: rgba(10, 10, 20, 0.92);
+		border: 1px solid color-mix(in srgb, var(--pin) 45%, transparent);
+		border-radius: 6px;
+		padding: 5px 9px;
+		white-space: nowrap;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+		backdrop-filter: blur(6px);
+		line-height: 1.25;
+	}
+
+	:global(.top-lot-name) {
+		font-size: 11px;
+		font-weight: 600;
+		color: #ffffff;
+		letter-spacing: 0.1px;
+	}
+
+	:global(.top-lot-spaces) {
+		font-size: 11px;
+		color: var(--pin);
+		font-variant-numeric: tabular-nums;
+	}
+
+	:global(.top-lot-spaces strong) {
+		font-size: 13px;
+		font-weight: 700;
 	}
 </style>

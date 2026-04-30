@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -8,6 +8,30 @@
 	let legendGroups = $derived(stepConfig.legendGroups || []);
 	let allLayers = $derived([...legendLayers, ...(legendGroups.flatMap(g => g.layers))]);
 	let legendVisible = $derived(stepConfig.legendVisible ?? false);
+	let topSlider = $derived(stepConfig.topSlider ?? false);
+	let topSliderOptions = $derived(stepConfig.topSliderOptions ?? [10, 20, 30, 50]);
+	let topSliderIndex = $derived(Math.max(0, topSliderOptions.indexOf($topLotsCount)));
+
+	let topCategoryFilter = $derived(stepConfig.topCategoryFilter ?? false);
+	let topCategories = $derived(stepConfig.topCategories ?? []);
+
+	function onTopSliderInput(e) {
+		const idx = Number(e.target.value);
+		topLotsCount.set(topSliderOptions[idx]);
+	}
+
+	function toggleCategory(id) {
+		topLotsCategories.update((current) => {
+			const next = new Set(current);
+			if (next.has(id)) {
+				if (next.size === 1) return next; // keep at least one active
+				next.delete(id);
+			} else {
+				next.add(id);
+			}
+			return next;
+		});
+	}
 
 	// Reset filters whenever the step changes
 	$effect(() => {
@@ -51,37 +75,72 @@
 	}
 </script>
 
-{#if legendVisible && allLayers.length > 0}
+{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter}
 	<div class="legend-panel">
-		<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
-		{#if legendLayers.length > 0}
-			{#each legendLayers as layer}
+		{#if legendVisible && allLayers.length > 0}
+			<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
+			{#if legendLayers.length > 0}
+				{#each legendLayers as layer}
+					<button
+						class="legend-item"
+						class:inactive={!isActive(layer.id)}
+						onclick={() => toggle(layer.id)}
+						title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
+					>
+						<span class="legend-swatch" style="background-color: {layer.color}"></span>
+						<span class="legend-label">{layer.label}</span>
+					</button>
+				{/each}
+			{/if}
+
+			{#each legendGroups as group}
+				<div class="legend-group-title">{group.title}</div>
+				{#each group.layers as layer}
+					<button
+						class="legend-item"
+						class:inactive={!isActive(layer.id)}
+						onclick={() => toggle(layer.id)}
+						title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
+					>
+						<span class="legend-swatch" style="background-color: {layer.color}"></span>
+						<span class="legend-label">{layer.label}</span>
+					</button>
+				{/each}
+			{/each}
+		{/if}
+
+		{#if topCategoryFilter}
+			<div class="legend-title">Lot type <span class="legend-hint">click to filter</span></div>
+			{#each topCategories as cat}
 				<button
 					class="legend-item"
-					class:inactive={!isActive(layer.id)}
-					onclick={() => toggle(layer.id)}
-					title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
+					class:inactive={!$topLotsCategories.has(cat.id)}
+					onclick={() => toggleCategory(cat.id)}
+					title={$topLotsCategories.has(cat.id) ? `Hide ${cat.label}` : `Show ${cat.label}`}
 				>
-					<span class="legend-swatch" style="background-color: {layer.color}"></span>
-					<span class="legend-label">{layer.label}</span>
+					<span class="legend-swatch" style="background-color: {cat.color}"></span>
+					<span class="legend-label">{cat.label}</span>
 				</button>
 			{/each}
 		{/if}
 
-		{#each legendGroups as group}
-			<div class="legend-group-title">{group.title}</div>
-			{#each group.layers as layer}
-				<button
-					class="legend-item"
-					class:inactive={!isActive(layer.id)}
-					onclick={() => toggle(layer.id)}
-					title={isActive(layer.id) ? `Hide ${layer.label}` : `Show ${layer.label}`}
-				>
-					<span class="legend-swatch" style="background-color: {layer.color}"></span>
-					<span class="legend-label">{layer.label}</span>
-				</button>
-			{/each}
-		{/each}
+		{#if topSlider}
+			<div class="legend-title legend-title-sub">Show top <span class="top-count">{$topLotsCount}</span> yards</div>
+			<input
+				class="top-slider"
+				type="range"
+				min="0"
+				max={topSliderOptions.length - 1}
+				step="1"
+				value={topSliderIndex}
+				oninput={onTopSliderInput}
+			/>
+			<div class="top-ticks">
+				{#each topSliderOptions as opt}
+					<span class:active={opt === $topLotsCount}>{opt}</span>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -166,5 +225,67 @@
 	.legend-label {
 		font-size: 0.8rem;
 		color: rgba(255, 255, 255, 0.75);
+	}
+
+	.legend-title-sub {
+		margin-top: 12px;
+	}
+
+	.top-count {
+		color: #00e5ff;
+		font-weight: 700;
+		font-size: 0.78rem;
+		margin-left: 4px;
+	}
+
+	.top-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 100%;
+		height: 4px;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 2px;
+		outline: none;
+		margin: 4px 0 6px;
+		cursor: pointer;
+	}
+
+	.top-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #00e5ff;
+		border: 2px solid #fff;
+		box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.25);
+		cursor: pointer;
+	}
+
+	.top-slider::-moz-range-thumb {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #00e5ff;
+		border: 2px solid #fff;
+		box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.25);
+		cursor: pointer;
+	}
+
+	.top-ticks {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.7rem;
+		color: rgba(255, 255, 255, 0.4);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.top-ticks span {
+		transition: color 0.15s;
+	}
+
+	.top-ticks span.active {
+		color: #00e5ff;
+		font-weight: 700;
 	}
 </style>

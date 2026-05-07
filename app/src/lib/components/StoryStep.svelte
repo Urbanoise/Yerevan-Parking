@@ -172,6 +172,23 @@
 				</div>
 			{/if}
 
+			{#if step.comparison}
+				{@const pct = Math.round(step.comparison.retained / step.comparison.current * 100)}
+				<div class="comparison-block">
+					<div class="comparison-header">
+						<span class="comparison-title">vs. Current Supply</span>
+						<span class="comparison-total">{step.comparison.current.toLocaleString()} surveyed</span>
+					</div>
+					<div class="retention-bar-track">
+						<div class="retention-bar-fill" style="width: {pct}%"></div>
+					</div>
+					<div class="retention-labels">
+						<span class="retention-kept">{pct}% Retained</span>
+						<span class="retention-removed">{100 - pct}% Removed</span>
+					</div>
+				</div>
+			{/if}
+
 			{#if step.description}
 				<p class="card-description">{step.description}</p>
 			{/if}
@@ -319,6 +336,65 @@
 		text-transform: uppercase;
 		letter-spacing: 0.3px;
 		text-align: center;
+	}
+
+	.comparison-block {
+		margin-bottom: 14px;
+		padding: 12px 14px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 10px;
+	}
+
+	.comparison-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 10px;
+	}
+
+	.comparison-title {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.6px;
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	.comparison-total {
+		font-size: 0.78rem;
+		color: rgba(255, 255, 255, 0.5);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.retention-bar-track {
+		height: 8px;
+		background: rgba(239, 83, 80, 0.35);
+		border-radius: 4px;
+		overflow: hidden;
+		margin-bottom: 6px;
+	}
+
+	.retention-bar-fill {
+		height: 100%;
+		background: #4CAF50;
+		border-radius: 4px;
+		transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	.retention-labels {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.retention-kept {
+		color: #4CAF50;
+		font-weight: 600;
+	}
+
+	.retention-removed {
+		color: rgba(239, 83, 80, 0.8);
 	}
 
 	.card-description {

@@ -297,6 +297,57 @@ export const LANDMARKS_LABELS = {
 	}
 };
 
+// Post-BRT individual parking bays (kz folder)
+export const NEW_DESIGN_KZ = {
+	id: 'new-design-kz',
+	type: 'line',
+	source: 'new-design-parking',
+	filter: ['==', ['get', 'folder'], 'kz'],
+	paint: {
+		'line-color': '#9C0072',
+		'line-width': 1.8,
+		'line-opacity': 0.75
+	},
+	layout: { visibility: 'none' }
+};
+
+// Post-BRT corridor street segments (Corridor 1 & 2), width ∝ space count
+export const NEW_DESIGN_CORRIDORS = {
+	id: 'new-design-corridors',
+	type: 'line',
+	source: 'new-design-parking',
+	filter: ['in', ['get', 'folder'], ['literal', ['Corridor 1', 'Corridor 2']]],
+	paint: {
+		'line-color': [
+			'match', ['get', 'folder'],
+			'Corridor 1', '#F9A825',
+			'Corridor 2', '#0288D1',
+			'#aaaaaa'
+		],
+		'line-width': ['interpolate', ['linear'], ['coalesce', ['get', 'spaces'], 1], 1, 3, 50, 10],
+		'line-opacity': 0.9
+	},
+	layout: {
+		visibility: 'none',
+		'line-cap': 'round',
+		'line-join': 'round'
+	}
+};
+
+// Invisible hit area for corridor segment clicks
+export const NEW_DESIGN_HIT = {
+	id: 'new-design-hit',
+	type: 'line',
+	source: 'new-design-parking',
+	filter: ['in', ['get', 'folder'], ['literal', ['Corridor 1', 'Corridor 2']]],
+	paint: {
+		'line-color': 'transparent',
+		'line-width': 16,
+		'line-opacity': 0
+	},
+	layout: { visibility: 'none' }
+};
+
 export const ALL_LAYERS = [
 	PARKING_AREAS_FILL,
 	PARKING_AREAS_FILL_IMPACT,
@@ -314,4 +365,7 @@ export const ALL_LAYERS = [
 	CORRIDORS_LINE,
 	LANDMARKS_POINTS,
 	LANDMARKS_LABELS,
+	NEW_DESIGN_KZ,
+	NEW_DESIGN_CORRIDORS,
+	NEW_DESIGN_HIT,
 ];

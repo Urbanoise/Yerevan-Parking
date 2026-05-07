@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
@@ -57,6 +57,12 @@
 		map.setLayoutProperty('landmarks-points', 'visibility', showLm ? 'visible' : 'none');
 		map.setLayoutProperty('landmarks-labels', 'visibility', showLm ? 'visible' : 'none');
 
+		// Post-BRT new design (kz individual bays excluded — corridors only)
+		const showND = s.showNewDesign ?? false;
+		map.setLayoutProperty('new-design-kz', 'visibility', 'none');
+		map.setLayoutProperty('new-design-corridors', 'visibility', showND ? 'visible' : 'none');
+		map.setLayoutProperty('new-design-hit', 'visibility', showND ? 'visible' : 'none');
+
 		// Camera
 		map.easeTo({
 			center: s.center,
@@ -95,6 +101,9 @@
 			map.setFilter('corridors-line', null);
 			map.setFilter('corridor-boundaries-fill', null);
 			map.setFilter('corridor-boundaries-outline', null);
+			map.setFilter('new-design-kz', null);
+			map.setFilter('new-design-corridors', null);
+			map.setFilter('new-design-hit', null);
 		}
 
 		// 2. Handle Corridor Mode (Check this before default colorMode because it has colorMode: 'default' but special layers)
@@ -113,6 +122,25 @@
 			map.setFilter('corridor-boundaries-fill', f);
 			map.setFilter('corridor-boundaries-outline', f);
 			return; // Corridor step is handled
+		}
+
+		// Post-BRT new design legend toggles
+		if (colorMode === 'new-design') {
+			const showC1 = active.has('new-c1');
+			const showC2 = active.has('new-c2');
+
+			const activeFolders = [
+				...(showC1 ? ['Corridor 1'] : []),
+				...(showC2 ? ['Corridor 2'] : []),
+			];
+			const corFilter = activeFolders.length === 0
+				? ['==', ['get', 'folder'], '__none__']
+				: ['in', ['get', 'folder'], ['literal', activeFolders]];
+			map.setFilter('new-design-corridors', corFilter);
+			map.setFilter('new-design-hit', corFilter);
+			map.setLayoutProperty('new-design-corridors', 'visibility', activeFolders.length > 0 ? 'visible' : 'none');
+			map.setLayoutProperty('new-design-hit', 'visibility', activeFolders.length > 0 ? 'visible' : 'none');
+			return;
 		}
 
 		const propertyMap = {
@@ -223,6 +251,24 @@
 		}
 	}
 
+	function applyCurrentParkingOverlay(stepIdx, showCurrent) {
+		if (!map || !$dataLoaded) return;
+		const step = STORY_STEPS[stepIdx];
+
+		// Always restore default opacity and filter so other steps aren't affected
+		map.setPaintProperty('parking-lines-color', 'line-opacity', 0.9);
+		map.setFilter('parking-lines-color', null);
+
+		if (step?.showNewDesign && showCurrent) {
+			map.setFilter('parking-lines-color', ['==', ['get', 'impact'], 'corridor']);
+			map.setLayoutProperty('parking-lines-color', 'visibility', 'visible');
+			map.setPaintProperty('parking-lines-color', 'line-opacity', 0.45);
+		} else if (step?.showNewDesign) {
+			map.setLayoutProperty('parking-lines-color', 'visibility', 'none');
+		}
+		// Non-new-design steps: applyStepVisibility handles visibility
+	}
+
 	onMount(async () => {
 		const maplibregl = await import('maplibre-gl');
 
@@ -267,12 +313,13 @@
 
 		map.on('load', async () => {
 			// Load all data sources
-			const [linesData, areasData, corridorsData, boundariesData, landmarksData] = await Promise.all([
+			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData] = await Promise.all([
 				fetch('/data/wgs84/parking-lines.geojson').then(r => r.json()),
 				fetch('/data/wgs84/parking-areas.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridors.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridor-boundaries.geojson').then(r => r.json()),
 				fetch('/data/wgs84/landmarks.geojson').then(r => r.json()),
+				fetch('/data/wgs84/new-design-parking.geojson').then(r => r.json()),
 			]);
 
 			// Parse "Space: N" from each area's HTML description into a numeric `space`
@@ -338,6 +385,7 @@
 			map.addSource('corridors', { type: 'geojson', data: corridorsData });
 			map.addSource('corridor-boundaries', { type: 'geojson', data: boundariesData });
 			map.addSource('landmarks', { type: 'geojson', data: landmarksData });
+			map.addSource('new-design-parking', { type: 'geojson', data: newDesignData });
 
 			// Add all layers
 			for (const layer of ALL_LAYERS) {
@@ -394,6 +442,24 @@
 					.addTo(map);
 			});
 
+			// Popups for post-BRT corridor segments
+			map.on('click', 'new-design-hit', (e) => {
+				if (!e.features?.length) return;
+				const p = e.features[0].properties;
+				const color = p.folder === 'Corridor 1' ? '#F9A825' : '#0288D1';
+				const el = document.createElement('div');
+				el.className = 'map-popup';
+				el.innerHTML = `
+					<div style="font-weight:600;color:${color};margin-bottom:4px">${p.name}</div>
+					<div>Corridor: <strong>${p.folder}</strong></div>
+					${p.spaces != null ? `<div>Spaces retained: <strong>${p.spaces}</strong></div>` : ''}
+				`;
+				new maplibregl.default.Popup({ closeButton: true, maxWidth: '240px' })
+					.setLngLat(e.lngLat)
+					.setDOMContent(el)
+					.addTo(map);
+			});
+
 			// Popups for landmarks
 			map.on('click', 'landmarks-points', (e) => {
 				if (!e.features?.length) return;
@@ -411,7 +477,7 @@
 			});
 
 			// Hover cursors
-			for (const layerId of ['parking-lines-hit', 'parking-areas-fill', 'landmarks-points', 'corridors-line']) {
+			for (const layerId of ['parking-lines-hit', 'parking-areas-fill', 'landmarks-points', 'corridors-line', 'new-design-hit']) {
 				map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
 				map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
 			}
@@ -458,6 +524,15 @@
 		const filters = $activeLegendFilters;
 		if (map && $dataLoaded) {
 			applyLegendFilter(filters);
+		}
+	});
+
+	// React to current-parking overlay toggle (also re-runs on step change)
+	$effect(() => {
+		const step = $currentStep;
+		const showCurrent = $showCurrentParking;
+		if (map && $dataLoaded) {
+			applyCurrentParkingOverlay(step, showCurrent);
 		}
 	});
 

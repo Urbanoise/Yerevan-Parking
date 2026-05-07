@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters, topLotsCount, topLotsCategories } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -14,6 +14,7 @@
 
 	let topCategoryFilter = $derived(stepConfig.topCategoryFilter ?? false);
 	let topCategories = $derived(stepConfig.topCategories ?? []);
+	let showCurrentToggle = $derived(stepConfig.showCurrentToggle ?? false);
 
 	function onTopSliderInput(e) {
 		const idx = Number(e.target.value);
@@ -75,7 +76,7 @@
 	}
 </script>
 
-{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter}
+{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter || showCurrentToggle}
 	<div class="legend-panel">
 		{#if legendVisible && allLayers.length > 0}
 			<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
@@ -124,6 +125,22 @@
 			{/each}
 		{/if}
 
+		{#if showCurrentToggle}
+			<div class="legend-divider"></div>
+			<div class="current-toggle-row">
+				<span class="legend-label">Current parking</span>
+				<button
+					class="legend-toggle-switch"
+					class:on={$showCurrentParking}
+					onclick={() => showCurrentParking.update(v => !v)}
+					aria-pressed={$showCurrentParking}
+					aria-label="Toggle current parking overlay"
+				>
+					<span class="legend-toggle-thumb"></span>
+				</button>
+			</div>
+		{/if}
+
 		{#if topSlider}
 			<div class="legend-title legend-title-sub">Show top <span class="top-count">{$topLotsCount}</span> yards</div>
 			<input
@@ -145,6 +162,52 @@
 {/if}
 
 <style>
+	.legend-divider {
+		height: 1px;
+		background: rgba(255, 255, 255, 0.08);
+		margin: 10px -16px;
+	}
+
+	.current-toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 2px 0;
+	}
+
+	.legend-toggle-switch {
+		position: relative;
+		width: 34px;
+		height: 19px;
+		background: rgba(255, 255, 255, 0.15);
+		border: none;
+		border-radius: 10px;
+		cursor: pointer;
+		padding: 0;
+		flex-shrink: 0;
+		transition: background 0.2s ease;
+	}
+
+	.legend-toggle-switch.on {
+		background: #42a5f5;
+	}
+
+	.legend-toggle-thumb {
+		position: absolute;
+		top: 2.5px;
+		left: 2.5px;
+		width: 14px;
+		height: 14px;
+		background: #fff;
+		border-radius: 50%;
+		transition: transform 0.2s ease;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+	}
+
+	.legend-toggle-switch.on .legend-toggle-thumb {
+		transform: translateX(15px);
+	}
 	.legend-panel {
 		position: fixed;
 		bottom: 24px;

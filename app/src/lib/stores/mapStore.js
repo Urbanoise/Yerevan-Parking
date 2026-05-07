@@ -14,3 +14,4 @@ export const geojsonData = writable({ lines: null, areas: null });
 export const topLotsCount = writable(20);
 export const topLotsCategories = writable(new Set(['yard', 'commercial']));
 export const showCurrentParking = writable(false);
+export const showSensitivityZones = writable(false);

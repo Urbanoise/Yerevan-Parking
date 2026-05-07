@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -15,6 +15,7 @@
 	let topCategoryFilter = $derived(stepConfig.topCategoryFilter ?? false);
 	let topCategories = $derived(stepConfig.topCategories ?? []);
 	let showCurrentToggle = $derived(stepConfig.showCurrentToggle ?? false);
+	let showSensitivityToggle = $derived(stepConfig.showSensitivityToggle ?? false);
 
 	function onTopSliderInput(e) {
 		const idx = Number(e.target.value);
@@ -46,8 +47,12 @@
 			} else {
 				activeLegendFilters.set(null);
 			}
+			if (!step.showSensitivityToggle) {
+				showSensitivityZones.set(false);
+			}
 		} else {
 			activeLegendFilters.set(null);
+			showSensitivityZones.set(false);
 		}
 	});
 
@@ -65,8 +70,6 @@
 
 			// If everything is active again, collapse back to null (no filter)
 			if (active.size === all.size) return null;
-			// If nothing is active, keep one item active (prevent blank map)
-			if (active.size === 0) { active.add(id); return active; }
 			return active;
 		});
 	}
@@ -76,7 +79,7 @@
 	}
 </script>
 
-{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter || showCurrentToggle}
+{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter || showCurrentToggle || showSensitivityToggle}
 	<div class="legend-panel">
 		{#if legendVisible && allLayers.length > 0}
 			<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
@@ -141,6 +144,32 @@
 			</div>
 		{/if}
 
+		{#if showSensitivityToggle}
+			<div class="legend-divider"></div>
+			<div class="current-toggle-row">
+				<span class="legend-label">Sensitivity zones</span>
+				<button
+					class="legend-toggle-switch"
+					class:on={$showSensitivityZones}
+					onclick={() => showSensitivityZones.update(v => !v)}
+					aria-pressed={$showSensitivityZones}
+					aria-label="Toggle sensitivity zones"
+				>
+					<span class="legend-toggle-thumb"></span>
+				</button>
+			</div>
+			{#if $showSensitivityZones}
+				<div class="sensitivity-key">
+					{#each [['No Parking','#9e9e9e'],['Low','#66bb6a'],['Moderate','#ffee58'],['Medium','#f57c00'],['High','#d32f2f']] as [label, color]}
+						<div class="sensitivity-item">
+							<span class="sensitivity-swatch" style="background:{color}"></span>
+							<span class="sensitivity-label">{label}</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/if}
+
 		{#if topSlider}
 			<div class="legend-title legend-title-sub">Show top <span class="top-count">{$topLotsCount}</span> yards</div>
 			<input
@@ -162,6 +191,31 @@
 {/if}
 
 <style>
+	.sensitivity-key {
+		margin-top: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.sensitivity-item {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+
+	.sensitivity-swatch {
+		width: 18px;
+		height: 4px;
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
+
+	.sensitivity-label {
+		font-size: 0.75rem;
+		color: rgba(255, 255, 255, 0.65);
+	}
+
 	.legend-divider {
 		height: 1px;
 		background: rgba(255, 255, 255, 0.08);

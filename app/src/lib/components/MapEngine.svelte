@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
@@ -62,6 +62,13 @@
 		map.setLayoutProperty('new-design-kz', 'visibility', 'none');
 		map.setLayoutProperty('new-design-corridors', 'visibility', showND ? 'visible' : 'none');
 		map.setLayoutProperty('new-design-hit', 'visibility', showND ? 'visible' : 'none');
+
+		// Sensitivity zones — only visible when the step supports the toggle AND it is toggled on
+		if (!s.showSensitivityToggle) {
+			map.setLayoutProperty('sensitivity-zones', 'visibility', 'none');
+		} else {
+			map.setLayoutProperty('sensitivity-zones', 'visibility', $showSensitivityZones ? 'visible' : 'none');
+		}
 
 		// Camera
 		map.easeTo({
@@ -313,13 +320,14 @@
 
 		map.on('load', async () => {
 			// Load all data sources
-			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData] = await Promise.all([
+			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData, sensitivityData] = await Promise.all([
 				fetch('/data/wgs84/parking-lines.geojson').then(r => r.json()),
 				fetch('/data/wgs84/parking-areas.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridors.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridor-boundaries.geojson').then(r => r.json()),
 				fetch('/data/wgs84/landmarks.geojson').then(r => r.json()),
 				fetch('/data/wgs84/new-design-parking.geojson').then(r => r.json()),
+				fetch('/data/wgs84/sensitivity-zones.geojson').then(r => r.json()),
 			]);
 
 			// Parse "Space: N" from each area's HTML description into a numeric `space`
@@ -386,6 +394,7 @@
 			map.addSource('corridor-boundaries', { type: 'geojson', data: boundariesData });
 			map.addSource('landmarks', { type: 'geojson', data: landmarksData });
 			map.addSource('new-design-parking', { type: 'geojson', data: newDesignData });
+			map.addSource('sensitivity-zones', { type: 'geojson', data: sensitivityData });
 
 			// Add all layers
 			for (const layer of ALL_LAYERS) {
@@ -534,6 +543,13 @@
 		if (map && $dataLoaded) {
 			applyCurrentParkingOverlay(step, showCurrent);
 		}
+	});
+
+	// Sensitivity zones visibility — only shown when the toggle is on
+	$effect(() => {
+		const show = $showSensitivityZones;
+		if (!map || !$dataLoaded) return;
+		map.setLayoutProperty('sensitivity-zones', 'visibility', show ? 'visible' : 'none');
 	});
 
 	// Top-lot marker visibility — depends on the active step, the slider value,

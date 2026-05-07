@@ -348,6 +348,27 @@ export const NEW_DESIGN_HIT = {
 	layout: { visibility: 'none' }
 };
 
+// Sensitivity zones — colored by parking demand level
+export const SENSITIVITY_ZONES = {
+	id: 'sensitivity-zones',
+	type: 'line',
+	source: 'sensitivity-zones',
+	paint: {
+		'line-color': [
+			'match', ['get', 'sensitivity'],
+			'No Parking', '#9e9e9e',
+			'Low',        '#66bb6a',
+			'Moderate',   '#ffee58',
+			'Medium',     '#f57c00',
+			'High',       '#d32f2f',
+			'#aaaaaa'
+		],
+		'line-width': 6,
+		'line-opacity': 0.85
+	},
+	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
+};
+
 export const ALL_LAYERS = [
 	PARKING_AREAS_FILL,
 	PARKING_AREAS_FILL_IMPACT,
@@ -368,4 +389,5 @@ export const ALL_LAYERS = [
 	NEW_DESIGN_KZ,
 	NEW_DESIGN_CORRIDORS,
 	NEW_DESIGN_HIT,
+	SENSITIVITY_ZONES,
 ];

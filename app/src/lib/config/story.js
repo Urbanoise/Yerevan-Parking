@@ -244,6 +244,7 @@ export const STORY_STEPS = [
 		showLandmarks: false,
 		showNewDesign: true,
 		showCurrentToggle: true,
+		showSensitivityToggle: true,
 		colorMode: 'new-design',
 		legendVisible: true,
 		legendLayers: [

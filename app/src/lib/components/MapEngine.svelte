@@ -1,8 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { ALL_LAYERS } from '$lib/layers/layers.js';
+	import { ALL_LAYERS, OCCUPANCY_COLOR } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	const MAX_TOP_LOTS = 50;
@@ -19,7 +19,10 @@
 
 		// Lines
 		const showL = s.showLines ?? false;
-		const colorMode = s.colorMode ?? 'default';
+		// Steps with a field-survey toggle resolve their colorMode from the active
+		// mode (occupancy / paid-free / retained); others use the step's static one.
+		const activeFieldMode = s.fieldModes?.find(m => m.id === $fieldSurveyMode) || s.fieldModes?.[0];
+		const colorMode = activeFieldMode ? activeFieldMode.colorMode : (s.colorMode ?? 'default');
 
 		map.setLayoutProperty('parking-lines', 'visibility',
 			showL && colorMode === 'default' ? 'visible' : 'none');
@@ -69,6 +72,41 @@
 		} else {
 			map.setLayoutProperty('sensitivity-zones', 'visibility', $showSensitivityZones ? 'visible' : 'none');
 		}
+
+		// Field surveys — renamed "(Zone NN)" survey paths, plus the KomitasCity yard
+		const showFS = s.showFieldSurveys ?? false;
+		// The survey paths are viewed through three toggle lenses: parking regulation
+		// (paid/free), average occupancy ramp, and "retained" — which is the same
+		// occupancy ramp but filtered to only the paths kept after the BRT redesign
+		// (removed paths disappear so you see the surviving network's occupancy).
+		const fsOcc = showFS && colorMode === 'field-occupancy';
+		const fsReg = showFS && colorMode === 'field-surveys';
+		const fsRet = showFS && colorMode === 'field-retained';
+		// Occupancy layers back both the plain occupancy lens and the retained filter.
+		const showOcc = fsOcc || fsRet;
+		map.setLayoutProperty('field-surveys-lines', 'visibility', fsReg ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-occupancy-glow', 'visibility', showOcc ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-occupancy', 'visibility', showOcc ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-hit', 'visibility', showFS ? 'visible' : 'none');
+		// In the retained lens, hide the removed paths; otherwise show every path.
+		const retainedOnly = fsRet ? ['==', ['get', 'retained'], 'retained'] : null;
+		map.setFilter('field-surveys-occupancy-glow', retainedOnly);
+		map.setFilter('field-surveys-occupancy', retainedOnly);
+		map.setFilter('field-surveys-lines', retainedOnly);
+		map.setFilter('field-surveys-hit', retainedOnly);
+		// The KomitasCity yard is retained, so it stays visible in every lens.
+		map.setLayoutProperty('field-survey-yard-fill', 'visibility', showFS ? 'visible' : 'none');
+		map.setLayoutProperty('field-survey-yard-outline', 'visibility', showFS ? 'visible' : 'none');
+		// In the occupancy and retained lenses, color the yard by its average occupancy
+		// on the same ramp as the survey paths; in paid/free keep its off-street purple.
+		map.setPaintProperty('field-survey-yard-fill', 'fill-color', showOcc ? OCCUPANCY_COLOR : '#7c4dff');
+		map.setPaintProperty('field-survey-yard-fill', 'fill-opacity', showOcc ? 0.55 : 0.35);
+		// Keep the off-street purple (#7c4dff, same as other indexes) on the border in
+		// the occupancy lenses — dashed there so the shaded yard still reads as an
+		// off-street facility (not an on-street path); solid purple otherwise.
+		map.setPaintProperty('field-survey-yard-outline', 'line-color', '#7c4dff');
+		map.setPaintProperty('field-survey-yard-outline', 'line-width', showOcc ? 3 : 2);
+		map.setPaintProperty('field-survey-yard-outline', 'line-dasharray', showOcc ? [2, 1.5] : [1]);
 
 		// Camera
 		map.easeTo({
@@ -320,7 +358,7 @@
 
 		map.on('load', async () => {
 			// Load all data sources
-			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData, sensitivityData] = await Promise.all([
+			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData, sensitivityData, fieldSurveysData] = await Promise.all([
 				fetch('/data/wgs84/parking-lines.geojson').then(r => r.json()),
 				fetch('/data/wgs84/parking-areas.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridors.geojson').then(r => r.json()),
@@ -328,6 +366,7 @@
 				fetch('/data/wgs84/landmarks.geojson').then(r => r.json()),
 				fetch('/data/wgs84/new-design-parking.geojson').then(r => r.json()),
 				fetch('/data/wgs84/sensitivity-zones.geojson').then(r => r.json()),
+				fetch('/data/wgs84/field-surveys.geojson').then(r => r.json()),
 			]);
 
 			// Parse "Space: N" from each area's HTML description into a numeric `space`
@@ -395,6 +434,7 @@
 			map.addSource('landmarks', { type: 'geojson', data: landmarksData });
 			map.addSource('new-design-parking', { type: 'geojson', data: newDesignData });
 			map.addSource('sensitivity-zones', { type: 'geojson', data: sensitivityData });
+			map.addSource('field-surveys', { type: 'geojson', data: fieldSurveysData, generateId: true });
 
 			// Add all layers
 			for (const layer of ALL_LAYERS) {
@@ -408,16 +448,26 @@
 
 			// Shared popup builder for parking features
 			function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-			function showParkingPopup(e, color) {
+			function showParkingPopup(e, color, showSurveyMetrics = false) {
 				if (!e.features?.length) return;
 				const p = e.features[0].properties;
 				const rows = [];
 				if (p.snippet) rows.push(`<div style="font-size:11px;opacity:0.6;margin-bottom:2px">${p.snippet}</div>`);
 				if (p.space) rows.push(`<div>Spaces: <strong>${p.space}</strong></div>`);
+				if (p.regulation) rows.push(`<div>Regulation: ${cap(p.regulation)}</div>`);
 				if (p.method) rows.push(`<div>Method: ${cap(p.method)}</div>`);
 				if (p.location) rows.push(`<div>Location: ${cap(p.location)}</div>`);
 				if (p.marking) rows.push(`<div>Marking: ${cap(p.marking)}</div>`);
 				if (p.signage) rows.push(`<div>Signage: ${cap(p.signage)}</div>`);
+				// Survey-derived occupancy metrics — shown only on the Field Surveys and
+				// Parking Occupancy steps (not in the Parking Regulation step's area popups).
+				if (showSurveyMetrics && p.occupancy_pct != null && p.occupancy_pct !== '') {
+					const occ = Number(p.occupancy_pct);
+					const occColor = occ <= 90 ? '#2ecc71' : occ <= 102 ? '#ff8a8a' : '#ff1f44';
+					rows.push(`<div>Avg occupancy: <strong style="color:${occColor}">${occ}%</strong> of capacity</div>`);
+				}
+				if (showSurveyMetrics && p.turnover != null && p.turnover !== '') rows.push(`<div>Turnover: ${p.turnover} vehicles/space</div>`);
+				if (showSurveyMetrics && p.avg_duration_h != null && p.avg_duration_h !== '') rows.push(`<div>Avg stay: ${p.avg_duration_h} h</div>`);
 				if (p.administration) rows.push(`<div>Administration: ${cap(p.administration)}</div>`);
 				if (p.impact) rows.push(`<div>Impact: ${cap(p.impact)}</div>`);
 				const el = document.createElement('div');
@@ -437,6 +487,12 @@
 
 			// Popups for parking areas
 			map.on('click', 'parking-areas-fill', (e) => showParkingPopup(e, '#7c4dff'));
+
+			// Popups for field-survey paths — show the survey occupancy metrics
+			map.on('click', 'field-surveys-hit', (e) => showParkingPopup(e, '#00e5ff', true));
+
+			// Popup for the KomitasCity yard (off-street) — also shows its occupancy analysis
+			map.on('click', 'field-survey-yard-fill', (e) => showParkingPopup(e, '#7c4dff', true));
 
 			// Popups for corridors
 			map.on('click', 'corridors-line', (e) => {
@@ -486,7 +542,7 @@
 			});
 
 			// Hover cursors
-			for (const layerId of ['parking-lines-hit', 'parking-areas-fill', 'landmarks-points', 'corridors-line', 'new-design-hit']) {
+			for (const layerId of ['parking-lines-hit', 'parking-areas-fill', 'landmarks-points', 'corridors-line', 'new-design-hit', 'field-surveys-hit', 'field-survey-yard-fill']) {
 				map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
 				map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
 			}
@@ -550,6 +606,15 @@
 		const show = $showSensitivityZones;
 		if (!map || !$dataLoaded) return;
 		map.setLayoutProperty('sensitivity-zones', 'visibility', show ? 'visible' : 'none');
+	});
+
+	// Field-survey coloring mode toggle (occupancy / paid-free / retained) —
+	// re-apply the step so the right survey-path layer and yard styling show.
+	$effect(() => {
+		const mode = $fieldSurveyMode;
+		if (map && $dataLoaded) {
+			applyStepVisibility($currentStep);
+		}
 	});
 
 	// Top-lot marker visibility — depends on the active step, the slider value,

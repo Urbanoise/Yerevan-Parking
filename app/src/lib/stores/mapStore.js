@@ -15,3 +15,6 @@ export const topLotsCount = writable(20);
 export const topLotsCategories = writable(new Set(['yard', 'commercial']));
 export const showCurrentParking = writable(false);
 export const showSensitivityZones = writable(false);
+// Active coloring mode for the merged Field Surveys step:
+// 'occupancy' | 'paidfree' | 'retained'
+export const fieldSurveyMode = writable('occupancy');

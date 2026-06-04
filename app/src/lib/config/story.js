@@ -258,4 +258,89 @@ export const STORY_STEPS = [
 		],
 		comparison: { current: 7005, retained: 1012 },
 	},
+	{
+		index: 9,
+		title: 'Field Surveys',
+		subtitle: 'Komitas survey paths — switch the lens',
+		center: [44.5173, 40.2066],
+		zoom: 15.2,
+		pitch: 0,
+		bearing: 0,
+		showLines: false,
+		showAreas: false,
+		showCorridors: false,
+		showLandmarks: false,
+		showFieldSurveys: true,
+		legendVisible: false,
+		// Merged Field Surveys step. The same renamed "(Zone NN)" survey paths around
+		// Komitas can be viewed through three lenses, switched with a toggle in the
+		// legend panel: average daily occupancy, parking regulation (paid/free), and
+		// the post-BRT retain/remove decision. Each mode carries its own colorMode,
+		// static key, stats and description; defaultFieldMode sets the initial view.
+		fieldSurveyToggle: true,
+		defaultFieldMode: 'occupancy',
+		fieldModes: [
+			{
+				id: 'occupancy',
+				label: 'Avg Occupancy',
+				colorMode: 'field-occupancy',
+				staticKey: {
+					title: 'Avg occupancy (% of capacity)',
+					items: [
+						{ label: '≤90% — within capacity', color: '#2ecc71' },
+						{ label: '~95% — at capacity', color: '#ff8a8a' },
+						{ label: '~105% — over capacity', color: '#ff4d4d' },
+						{ label: '110%+ — chronic overflow', color: '#ff1f44' },
+						{ label: 'Dashed purple outline — off-street yard', color: '#7c4dff' },
+					],
+				},
+				stats: [
+					{ value: 56, label: 'Mean Occupancy %', color: '#2ecc71' },
+					{ value: 2, label: 'Zones Over Capacity', color: '#ff1f44' },
+					{ value: 26, label: 'Zones Under 50% (slack)', color: '#cddc39' },
+					{ value: 35, label: 'Parked Off-Carriageway %', color: '#00e5ff' },
+				],
+			},
+			{
+				id: 'paidfree',
+				label: 'Paid / Free',
+				colorMode: 'field-surveys',
+				staticKey: {
+					title: 'Parking Regulation',
+					items: [
+						{ label: 'White — free', color: '#ffffff' },
+						{ label: 'Blue — paid', color: '#42a5f5' },
+						{ label: 'Yard — off-street (KomitasCity)', color: '#7c4dff' },
+					],
+				},
+				stats: [
+					{ value: 53, label: 'Survey Paths', color: '#00e5ff' },
+					{ value: 174, label: 'White Spaces', color: '#ffffff' },
+					{ value: 276, label: 'Blue Spaces', color: '#42a5f5' },
+					{ value: 123, label: 'KomitasCity Yard', color: '#7c4dff' },
+				],
+			},
+			{
+				id: 'retained',
+				label: 'Retained / Removed',
+				colorMode: 'field-retained',
+				staticKey: {
+					title: 'Retained network — avg occupancy',
+					items: [
+						{ label: '≤90% — within capacity', color: '#2ecc71' },
+						{ label: '~95% — at capacity', color: '#ff8a8a' },
+						{ label: '~105% — over capacity', color: '#ff4d4d' },
+						{ label: '110%+ — chronic overflow', color: '#ff1f44' },
+						{ label: 'Removed paths hidden — retained KomitasCity yard kept', color: '#7c4dff' },
+					],
+				},
+				stats: [
+					{ value: 342, label: 'Retained Spaces', color: '#4CAF50' },
+					{ value: 108, label: 'Removed Spaces', color: '#EF5350' },
+					{ value: 76, label: '% Spaces Retained', color: '#4CAF50' },
+					{ value: 39, label: 'Retained Paths', color: '#00e5ff' },
+				],
+			},
+		],
+	},
 ];

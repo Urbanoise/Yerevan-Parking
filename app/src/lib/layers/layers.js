@@ -369,6 +369,133 @@ export const SENSITIVITY_ZONES = {
 	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
 };
 
+// Field Surveys — renamed "(Zone NN)" survey paths in the Komitas area,
+// colored by parking regulation (same palette as the Parking Regulation step).
+export const FIELD_SURVEYS_LINES = {
+	id: 'field-surveys-lines',
+	type: 'line',
+	source: 'field-surveys',
+	paint: {
+		'line-color': [
+			'match', ['get', 'regulation'],
+			'white', '#ffffff',
+			'red', '#EF5350',
+			'blue', '#42a5f5',
+			'black', '#888888',
+			'#ffffff'
+		],
+		'line-width': 4,
+		'line-opacity': 0.9
+	},
+	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
+};
+
+// Occupancy ramp shared by the glow + line layers below. ~85–90% is the healthy
+// "sweet spot" for on-street parking (full enough to be efficient, with just
+// enough turnover to find a space), so everything up to 90% stays green; above
+// 90% it grades green → yellow → orange → red as the street oversaturates and
+// vehicles spill onto footpaths/setbacks. On the dark CARTO basemap all anchors
+// stay bright so severity pops. Past 90% it goes straight to red shades (no
+// yellow/orange) — light red just over the line, deepening to intense red as the
+// street oversaturates. The 90→94 band is kept tight so the green→red blend
+// doesn't muddy. occupancy_pct comes from compute_field_survey_metrics.mjs.
+// occupancy_pct is now a full-day AVERAGE (mean vehicles present ÷ legal spaces),
+// so the real range is ~30–113%: most zones have daily slack, a couple sit over
+// 100% (chronic overflow). The ramp stays green up to the 90% sweet-spot top,
+// then grades straight to red across 90→115% where the over-capacity zones live.
+export const OCCUPANCY_COLOR = [
+	'interpolate', ['linear'], ['coalesce', ['get', 'occupancy_pct'], 0],
+	0, '#2ecc71',     // empty → green
+	90, '#2ecc71',    // top of the sweet spot — still green
+	94, '#ff8a8a',    // just over — light red
+	103, '#ff4d4d',   // over capacity
+	113, '#ff1f44',   // chronic overflow — vivid red (the busiest zone)
+	140, '#d50000'    // headroom for re-runs — intense red
+];
+const OCCUPANCY_WIDTH = [
+	'interpolate', ['linear'], ['coalesce', ['get', 'occupancy_pct'], 0],
+	30, 3,
+	70, 4,
+	95, 5.5,
+	115, 7.5
+];
+
+// Soft blurred halo beneath the occupancy lines — makes oversaturated streets
+// glow on the dark basemap and draws the eye to the hotspots.
+export const FIELD_SURVEYS_OCCUPANCY_GLOW = {
+	id: 'field-surveys-occupancy-glow',
+	type: 'line',
+	source: 'field-surveys',
+	paint: {
+		'line-color': OCCUPANCY_COLOR,
+		'line-width': ['*', OCCUPANCY_WIDTH, 2.4],
+		'line-blur': 8,
+		'line-opacity': [
+			// Only the over-capacity zones glow, scaling in above 95%.
+			'interpolate', ['linear'], ['coalesce', ['get', 'occupancy_pct'], 0],
+			95, 0,
+			105, 0.4,
+			113, 0.65
+		]
+	},
+	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
+};
+
+export const FIELD_SURVEYS_OCCUPANCY = {
+	id: 'field-surveys-occupancy',
+	type: 'line',
+	source: 'field-surveys',
+	paint: {
+		'line-color': OCCUPANCY_COLOR,
+		'line-width': OCCUPANCY_WIDTH,
+		'line-opacity': 0.95
+	},
+	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
+};
+
+// Invisible wide hit area for clicking field-survey paths
+export const FIELD_SURVEYS_HIT = {
+	id: 'field-surveys-hit',
+	type: 'line',
+	source: 'field-surveys',
+	paint: {
+		'line-color': 'transparent',
+		'line-width': 16,
+		'line-opacity': 0
+	},
+	layout: { visibility: 'none' }
+};
+
+// KomitasCity off-street yard, shown alongside the Field Surveys paths.
+// Geometry and capacity (Space: 123) come from the existing parking-areas
+// feature (the Parking Regulation data), so it is sourced/filtered from there
+// rather than duplicated. Uses the same purple as off-street areas in the
+// Parking Regulation step (#7c4dff).
+export const FIELD_SURVEY_YARD_FILL = {
+	id: 'field-survey-yard-fill',
+	type: 'fill',
+	source: 'parking-areas',
+	filter: ['==', ['get', 'name'], 'KomitasCity'],
+	paint: {
+		'fill-color': '#7c4dff',
+		'fill-opacity': 0.35
+	},
+	layout: { visibility: 'none' }
+};
+
+export const FIELD_SURVEY_YARD_OUTLINE = {
+	id: 'field-survey-yard-outline',
+	type: 'line',
+	source: 'parking-areas',
+	filter: ['==', ['get', 'name'], 'KomitasCity'],
+	paint: {
+		'line-color': '#7c4dff',
+		'line-width': 2,
+		'line-opacity': 0.9
+	},
+	layout: { visibility: 'none', 'line-join': 'round' }
+};
+
 export const ALL_LAYERS = [
 	PARKING_AREAS_FILL,
 	PARKING_AREAS_FILL_IMPACT,
@@ -390,4 +517,10 @@ export const ALL_LAYERS = [
 	NEW_DESIGN_CORRIDORS,
 	NEW_DESIGN_HIT,
 	SENSITIVITY_ZONES,
+	FIELD_SURVEYS_LINES,
+	FIELD_SURVEYS_OCCUPANCY_GLOW,
+	FIELD_SURVEYS_OCCUPANCY,
+	FIELD_SURVEYS_HIT,
+	FIELD_SURVEY_YARD_FILL,
+	FIELD_SURVEY_YARD_OUTLINE,
 ];

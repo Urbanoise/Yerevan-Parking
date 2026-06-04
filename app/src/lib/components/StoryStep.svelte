@@ -3,12 +3,20 @@
 	import { tweened } from 'svelte/motion';
 	import { cubicOut } from 'svelte/easing';
 
-	import { activeLegendFilters, geojsonData } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, geojsonData, fieldSurveyMode } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 
 	let { step } = $props();
 
 	let statEls = $state([]);
+
+	// Steps with a field-survey lens toggle carry their stats/description per mode;
+	// resolve the active one (others fall back to the step's own stats/description).
+	let activeFieldMode = $derived(step.fieldModes
+		? (step.fieldModes.find(m => m.id === $fieldSurveyMode) || step.fieldModes[0])
+		: null);
+	let resolvedStats = $derived(activeFieldMode ? activeFieldMode.stats : step.stats);
+	let resolvedDescription = $derived(activeFieldMode ? activeFieldMode.description : step.description);
 
 	let dynamicStats = $derived.by(() => {
 		// Only run dynamic calculation on steps that have legendGroups configured with an Impact Area toggle
@@ -109,11 +117,11 @@
 			}));
 		}
 		
-		return step.stats || [];
+		return resolvedStats || [];
 	});
 
 	let isVisible = $state(false);
-	let animatedValues = tweened((step.stats || (step.legendGroups ? step.legendGroups[0].layers : [])).map(() => 0), { duration: 1500, easing: cubicOut });
+	let animatedValues = tweened((resolvedStats || (step.legendGroups ? step.legendGroups[0].layers : [])).map(() => 0), { duration: 1500, easing: cubicOut });
 
 	$effect(() => {
 		if (isVisible && dynamicStats.length > 0) {
@@ -189,8 +197,8 @@
 				</div>
 			{/if}
 
-			{#if step.description}
-				<p class="card-description">{step.description}</p>
+			{#if resolvedDescription}
+				<p class="card-description">{resolvedDescription}</p>
 			{/if}
 
 			{#if step.topStreets?.length}

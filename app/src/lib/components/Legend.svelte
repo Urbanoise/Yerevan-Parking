@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -16,6 +16,11 @@
 	let topCategories = $derived(stepConfig.topCategories ?? []);
 	let showCurrentToggle = $derived(stepConfig.showCurrentToggle ?? false);
 	let showSensitivityToggle = $derived(stepConfig.showSensitivityToggle ?? false);
+	// Field-survey lens toggle: a 3-way mode selector (occupancy / paid-free /
+	// retained). The active mode supplies the static key shown below the toggle.
+	let fieldModes = $derived(stepConfig.fieldModes ?? null);
+	let activeFieldMode = $derived(fieldModes ? (fieldModes.find(m => m.id === $fieldSurveyMode) || fieldModes[0]) : null);
+	let staticKey = $derived(activeFieldMode ? activeFieldMode.staticKey : (stepConfig.staticKey ?? null));
 
 	function onTopSliderInput(e) {
 		const idx = Number(e.target.value);
@@ -50,6 +55,10 @@
 			if (!step.showSensitivityToggle) {
 				showSensitivityZones.set(false);
 			}
+			// Reset the field-survey lens to the step's default when entering it.
+			if (step.fieldModes) {
+				fieldSurveyMode.set(step.defaultFieldMode ?? step.fieldModes[0].id);
+			}
 		} else {
 			activeLegendFilters.set(null);
 			showSensitivityZones.set(false);
@@ -79,8 +88,32 @@
 	}
 </script>
 
-{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter || showCurrentToggle || showSensitivityToggle}
+{#if (legendVisible && allLayers.length > 0) || topSlider || topCategoryFilter || showCurrentToggle || showSensitivityToggle || staticKey || fieldModes}
 	<div class="legend-panel">
+		{#if fieldModes}
+			<div class="legend-title">View <span class="legend-hint">switch lens</span></div>
+			<div class="mode-toggle">
+				{#each fieldModes as mode}
+					<button
+						class="mode-btn"
+						class:active={$fieldSurveyMode === mode.id}
+						onclick={() => fieldSurveyMode.set(mode.id)}
+						aria-pressed={$fieldSurveyMode === mode.id}
+					>{mode.label}</button>
+				{/each}
+			</div>
+		{/if}
+
+		{#if staticKey}
+			<div class="legend-title">{staticKey.title}</div>
+			{#each staticKey.items as item}
+				<div class="legend-item legend-item--static">
+					<span class="legend-swatch" style="background-color: {item.color}"></span>
+					<span class="legend-label">{item.label}</span>
+				</div>
+			{/each}
+		{/if}
+
 		{#if legendVisible && allLayers.length > 0}
 			<div class="legend-title">Legend <span class="legend-hint">click to filter</span></div>
 			{#if legendLayers.length > 0}
@@ -191,6 +224,41 @@
 {/if}
 
 <style>
+	.mode-toggle {
+		display: flex;
+		gap: 4px;
+		margin-bottom: 14px;
+		padding: 3px;
+		background: rgba(255, 255, 255, 0.06);
+		border-radius: 9px;
+	}
+
+	.mode-btn {
+		flex: 1;
+		padding: 6px 8px;
+		background: none;
+		border: none;
+		border-radius: 6px;
+		color: rgba(255, 255, 255, 0.55);
+		font-family: 'Inter', sans-serif;
+		font-size: 0.72rem;
+		font-weight: 500;
+		line-height: 1.2;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+		white-space: nowrap;
+	}
+
+	.mode-btn:hover {
+		color: rgba(255, 255, 255, 0.85);
+	}
+
+	.mode-btn.active {
+		background: #00CED1;
+		color: #06121a;
+		font-weight: 600;
+	}
+
 	.sensitivity-key {
 		margin-top: 8px;
 		display: flex;
@@ -321,6 +389,14 @@
 
 	.legend-item:hover {
 		background: rgba(255, 255, 255, 0.07);
+	}
+
+	.legend-item--static {
+		cursor: default;
+	}
+
+	.legend-item--static:hover {
+		background: none;
 	}
 
 	.legend-item.inactive {

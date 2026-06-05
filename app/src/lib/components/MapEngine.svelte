@@ -1,17 +1,38 @@
 <script>
 	import { onMount } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS, OCCUPANCY_COLOR } from '$lib/layers/layers.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	const MAX_TOP_LOTS = 50;
 
+	// Field Surveys viewport→area detection. The step shows both surveyed areas at
+	// once; once the reader zooms past FS_AREA_ZOOM the dashboard settles on whichever
+	// neighbourhood centroid is nearest, otherwise it reports the combined ('all') view.
+	const FS_AREA_ZOOM = 13.3;
+	const FS_AREA_CENTROIDS = { komitas: [44.5173, 40.2066], shiraz: [44.4649, 40.1956] };
+
 	let mapContainer;
 	let map = null;
 	let topMarkers = [];
+	let currentStepIdx = 0;
 
-	function applyStepVisibility(step) {
+	function updateFieldSurveyArea() {
+		const s = STORY_STEPS[currentStepIdx];
+		if (!map || !s?.showFieldSurveys) return;
+		const z = map.getZoom();
+		if (z < FS_AREA_ZOOM) { fieldSurveyArea.set('all'); return; }
+		const c = map.getCenter();
+		let best = 'all', bestDist = Infinity;
+		for (const [area, [lng, lat]] of Object.entries(FS_AREA_CENTROIDS)) {
+			const d = (c.lng - lng) ** 2 + (c.lat - lat) ** 2;
+			if (d < bestDist) { bestDist = d; best = area; }
+		}
+		fieldSurveyArea.set(best);
+	}
+
+	function applyStepVisibility(step, moveCamera = true) {
 		if (!map || !$dataLoaded) return;
 
 		const s = STORY_STEPS[step];
@@ -19,10 +40,12 @@
 
 		// Lines
 		const showL = s.showLines ?? false;
-		// Steps with a field-survey toggle resolve their colorMode from the active
-		// mode (occupancy / paid-free / retained); others use the step's static one.
-		const activeFieldMode = s.fieldModes?.find(m => m.id === $fieldSurveyMode) || s.fieldModes?.[0];
-		const colorMode = activeFieldMode ? activeFieldMode.colorMode : (s.colorMode ?? 'default');
+		// Steps with a field-survey toggle resolve their colorMode from the active lens
+		// (occupancy / paid-free); the retained/removed switch is a filter, not a lens,
+		// so it's excluded here. Other steps use the step's static colorMode.
+		const activeLens = s.fieldModes?.find(m => m.id === $fieldSurveyMode && !m.isSwitch)
+			?? s.fieldModes?.find(m => !m.isSwitch);
+		const colorMode = activeLens ? activeLens.colorMode : (s.colorMode ?? 'default');
 
 		map.setLayoutProperty('parking-lines', 'visibility',
 			showL && colorMode === 'default' ? 'visible' : 'none');
@@ -73,50 +96,52 @@
 			map.setLayoutProperty('sensitivity-zones', 'visibility', $showSensitivityZones ? 'visible' : 'none');
 		}
 
-		// Field surveys — renamed "(Zone NN)" survey paths, plus the KomitasCity yard
+		// Field surveys — renamed "(Zone NN)" survey paths, plus the off-street yards
 		const showFS = s.showFieldSurveys ?? false;
-		// The survey paths are viewed through three toggle lenses: parking regulation
-		// (paid/free), average occupancy ramp, and "retained" — which is the same
-		// occupancy ramp but filtered to only the paths kept after the BRT redesign
-		// (removed paths disappear so you see the surviving network's occupancy).
+		// The survey paths are coloured through one of two lenses: average occupancy ramp
+		// or parking regulation (paid/free). The retained/removed switch is independent of
+		// the lens — when on it just hides the paths removed by the BRT redesign, so the
+		// surviving network keeps whichever lens colouring is active.
 		const fsOcc = showFS && colorMode === 'field-occupancy';
 		const fsReg = showFS && colorMode === 'field-surveys';
-		const fsRet = showFS && colorMode === 'field-retained';
-		// Occupancy layers back both the plain occupancy lens and the retained filter.
-		const showOcc = fsOcc || fsRet;
 		map.setLayoutProperty('field-surveys-lines', 'visibility', fsReg ? 'visible' : 'none');
-		map.setLayoutProperty('field-surveys-occupancy-glow', 'visibility', showOcc ? 'visible' : 'none');
-		map.setLayoutProperty('field-surveys-occupancy', 'visibility', showOcc ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-occupancy-glow', 'visibility', fsOcc ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-occupancy', 'visibility', fsOcc ? 'visible' : 'none');
 		map.setLayoutProperty('field-surveys-hit', 'visibility', showFS ? 'visible' : 'none');
-		// In the retained lens, hide the removed paths; otherwise show every path.
-		const retainedOnly = fsRet ? ['==', ['get', 'retained'], 'retained'] : null;
+		// Retained/removed filter: when on, keep only the paths retained after the redesign.
+		const retainedOnly = (showFS && $fieldSurveyRetained) ? ['==', ['get', 'retained'], 'retained'] : null;
 		map.setFilter('field-surveys-occupancy-glow', retainedOnly);
 		map.setFilter('field-surveys-occupancy', retainedOnly);
 		map.setFilter('field-surveys-lines', retainedOnly);
 		map.setFilter('field-surveys-hit', retainedOnly);
-		// The KomitasCity yard is retained, so it stays visible in every lens.
+		// Both off-street yards (KomitasCity / ShirazYard010) are always retained, so the
+		// removed filter never touches them — they stay visible in every lens.
 		map.setLayoutProperty('field-survey-yard-fill', 'visibility', showFS ? 'visible' : 'none');
 		map.setLayoutProperty('field-survey-yard-outline', 'visibility', showFS ? 'visible' : 'none');
-		// In the occupancy and retained lenses, color the yard by its average occupancy
-		// on the same ramp as the survey paths; in paid/free keep its off-street purple.
-		map.setPaintProperty('field-survey-yard-fill', 'fill-color', showOcc ? OCCUPANCY_COLOR : '#7c4dff');
-		map.setPaintProperty('field-survey-yard-fill', 'fill-opacity', showOcc ? 0.55 : 0.35);
+		// In the occupancy lens, color the yard by its average occupancy on the same ramp
+		// as the survey paths; in paid/free keep its off-street purple.
+		map.setPaintProperty('field-survey-yard-fill', 'fill-color', fsOcc ? OCCUPANCY_COLOR : '#7c4dff');
+		map.setPaintProperty('field-survey-yard-fill', 'fill-opacity', fsOcc ? 0.55 : 0.35);
 		// Keep the off-street purple (#7c4dff, same as other indexes) on the border in
-		// the occupancy lenses — dashed there so the shaded yard still reads as an
+		// the occupancy lens — dashed there so the shaded yard still reads as an
 		// off-street facility (not an on-street path); solid purple otherwise.
 		map.setPaintProperty('field-survey-yard-outline', 'line-color', '#7c4dff');
-		map.setPaintProperty('field-survey-yard-outline', 'line-width', showOcc ? 3 : 2);
-		map.setPaintProperty('field-survey-yard-outline', 'line-dasharray', showOcc ? [2, 1.5] : [1]);
+		map.setPaintProperty('field-survey-yard-outline', 'line-width', fsOcc ? 3 : 2);
+		map.setPaintProperty('field-survey-yard-outline', 'line-dasharray', fsOcc ? [2, 1.5] : [1]);
 
-		// Camera
-		map.easeTo({
-			center: s.center,
-			zoom: s.zoom,
-			pitch: s.pitch ?? 0,
-			bearing: s.bearing ?? 0,
-			duration: 1200,
-			easing: (t) => t * (2 - t)
-		});
+		// Camera — only fly when entering the step. Re-applying visibility for a lens
+		// toggle (paid/free, retained/removed) must NOT move the camera, so a reader who
+		// has zoomed into a survey location stays "locked in" there across toggles.
+		if (moveCamera) {
+			map.easeTo({
+				center: s.center,
+				zoom: s.zoom,
+				pitch: s.pitch ?? 0,
+				bearing: s.bearing ?? 0,
+				duration: 1200,
+				easing: (t) => t * (2 - t)
+			});
+		}
 	}
 
 	function applyLegendFilter(filters) {
@@ -358,7 +383,7 @@
 
 		map.on('load', async () => {
 			// Load all data sources
-			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData, sensitivityData, fieldSurveysData] = await Promise.all([
+			const [linesData, areasData, corridorsData, boundariesData, landmarksData, newDesignData, sensitivityData, fieldSurveysData, fieldYardsData] = await Promise.all([
 				fetch('/data/wgs84/parking-lines.geojson').then(r => r.json()),
 				fetch('/data/wgs84/parking-areas.geojson').then(r => r.json()),
 				fetch('/data/wgs84/corridors.geojson').then(r => r.json()),
@@ -367,7 +392,11 @@
 				fetch('/data/wgs84/new-design-parking.geojson').then(r => r.json()),
 				fetch('/data/wgs84/sensitivity-zones.geojson').then(r => r.json()),
 				fetch('/data/wgs84/field-surveys.geojson').then(r => r.json()),
+				fetch('/data/wgs84/field-survey-yards.geojson').then(r => r.json()),
 			]);
+
+			// Per-area dashboard numbers travel inside the field-surveys file.
+			fieldSurveyStats.set(fieldSurveysData.areaStats ?? null);
 
 			// Parse "Space: N" from each area's HTML description into a numeric `space`
 			// property (so popups and labels can read it directly), then flag the top N
@@ -435,6 +464,7 @@
 			map.addSource('new-design-parking', { type: 'geojson', data: newDesignData });
 			map.addSource('sensitivity-zones', { type: 'geojson', data: sensitivityData });
 			map.addSource('field-surveys', { type: 'geojson', data: fieldSurveysData, generateId: true });
+			map.addSource('field-survey-yards', { type: 'geojson', data: fieldYardsData, generateId: true });
 
 			// Add all layers
 			for (const layer of ALL_LAYERS) {
@@ -491,7 +521,7 @@
 			// Popups for field-survey paths — show the survey occupancy metrics
 			map.on('click', 'field-surveys-hit', (e) => showParkingPopup(e, '#00e5ff', true));
 
-			// Popup for the KomitasCity yard (off-street) — also shows its occupancy analysis
+			// Popup for the off-street yards (KomitasCity / ShirazYard010) — shows occupancy analysis
 			map.on('click', 'field-survey-yard-fill', (e) => showParkingPopup(e, '#7c4dff', true));
 
 			// Popups for corridors
@@ -567,8 +597,14 @@
 				});
 			}
 
+			// Re-evaluate which surveyed area the dashboard reports on after every
+			// camera move (only acts while the Field Surveys step is active).
+			map.on('moveend', updateFieldSurveyArea);
+
 			dataLoaded.set(true);
+			currentStepIdx = $currentStep;
 			applyStepVisibility($currentStep);
+			updateFieldSurveyArea();
 		});
 
 		return () => {
@@ -579,8 +615,13 @@
 	// React to step changes
 	$effect(() => {
 		const step = $currentStep;
+		currentStepIdx = step;
 		if (map && $dataLoaded) {
 			applyStepVisibility(step);
+			// Entering a non-survey step? Reset to the combined view so the next time
+			// the survey step is shown it starts on 'all' until the camera settles.
+			if (!STORY_STEPS[step]?.showFieldSurveys) fieldSurveyArea.set('all');
+			else updateFieldSurveyArea();
 		}
 	});
 
@@ -612,8 +653,10 @@
 	// re-apply the step so the right survey-path layer and yard styling show.
 	$effect(() => {
 		const mode = $fieldSurveyMode;
+		const retained = $fieldSurveyRetained;
 		if (map && $dataLoaded) {
-			applyStepVisibility($currentStep);
+			// Keep the camera where the reader left it (locked into a survey location).
+			applyStepVisibility($currentStep, false);
 		}
 	});
 

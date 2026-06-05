@@ -261,9 +261,9 @@ export const STORY_STEPS = [
 	{
 		index: 9,
 		title: 'Field Surveys',
-		subtitle: 'Komitas survey paths — switch the lens',
-		center: [44.5173, 40.2066],
-		zoom: 15.2,
+		subtitle: 'Survey paths in two areas — zoom in to compare',
+		center: [44.4911, 40.2011],
+		zoom: 12.5,
 		pitch: 0,
 		bearing: 0,
 		showLines: false,
@@ -272,11 +272,15 @@ export const STORY_STEPS = [
 		showLandmarks: false,
 		showFieldSurveys: true,
 		legendVisible: false,
-		// Merged Field Surveys step. The same renamed "(Zone NN)" survey paths around
-		// Komitas can be viewed through three lenses, switched with a toggle in the
-		// legend panel: average daily occupancy, parking regulation (paid/free), and
-		// the post-BRT retain/remove decision. Each mode carries its own colorMode,
-		// static key, stats and description; defaultFieldMode sets the initial view.
+		// Merged Field Surveys step. The renamed "(Zone NN)" survey paths span two
+		// areas — Komitas (zones 70–122) and Shiraz/Hasratyan (zones 123–156) — each
+		// with its off-street yard (KomitasCity / ShirazYard010). They can be viewed
+		// through three lenses, switched with a toggle in the legend panel: average
+		// daily occupancy, parking regulation (paid/free), and the post-BRT retain/
+		// remove decision. Each mode carries its own colorMode, static key, stats and
+		// description; defaultFieldMode sets the initial view. The stats below are
+		// fallbacks — live dashboard numbers are viewport-aware and resolved from the
+		// areaStats embedded in field-surveys.geojson as the reader zooms between areas.
 		fieldSurveyToggle: true,
 		defaultFieldMode: 'occupancy',
 		fieldModes: [
@@ -308,9 +312,9 @@ export const STORY_STEPS = [
 				staticKey: {
 					title: 'Parking Regulation',
 					items: [
-						{ label: 'White — free', color: '#ffffff' },
-						{ label: 'Blue — paid', color: '#42a5f5' },
-						{ label: 'Yard — off-street (KomitasCity)', color: '#7c4dff' },
+						{ label: 'White — Free', color: '#ffffff' },
+						{ label: 'Blue — Paid', color: '#42a5f5' },
+						{ label: 'Yard — Off-street', color: '#7c4dff' },
 					],
 				},
 				stats: [
@@ -323,7 +327,11 @@ export const STORY_STEPS = [
 			{
 				id: 'retained',
 				label: 'Retained / Removed',
-				colorMode: 'field-retained',
+				// Rendered as a standalone switch bar below the lens segment, not a lens.
+				// When on, it hides the paths removed by the BRT redesign from whichever
+				// lens (avg occupancy / paid-free) is active; the survivors keep their
+				// lens colouring. Its stats/key describe the retained network.
+				isSwitch: true,
 				staticKey: {
 					title: 'Retained network — avg occupancy',
 					items: [
@@ -331,7 +339,7 @@ export const STORY_STEPS = [
 						{ label: '~95% — at capacity', color: '#ff8a8a' },
 						{ label: '~105% — over capacity', color: '#ff4d4d' },
 						{ label: '110%+ — chronic overflow', color: '#ff1f44' },
-						{ label: 'Removed paths hidden — retained KomitasCity yard kept', color: '#7c4dff' },
+						{ label: 'Dashed purple outline — off-street yard', color: '#7c4dff' },
 					],
 				},
 				stats: [

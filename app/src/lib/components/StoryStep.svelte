@@ -3,19 +3,31 @@
 	import { tweened } from 'svelte/motion';
 	import { cubicOut } from 'svelte/easing';
 
-	import { activeLegendFilters, geojsonData, fieldSurveyMode } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, geojsonData, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 
 	let { step } = $props();
 
 	let statEls = $state([]);
 
-	// Steps with a field-survey lens toggle carry their stats/description per mode;
-	// resolve the active one (others fall back to the step's own stats/description).
+	const AREA_LABELS = { all: 'Both areas', komitas: 'Komitas', shiraz: 'Shiraz & Hasratyan' };
+	// On the Field Surveys step the dashboard names the area the reader has zoomed into.
+	let areaLabel = $derived(step.showFieldSurveys ? (AREA_LABELS[$fieldSurveyArea] ?? null) : null);
+
+	// Steps with a field-survey toggle carry stats/description per mode. The dashboard
+	// reports the retained-network block when the retained filter is on, otherwise the
+	// active lens block (occupancy / paid-free).
+	let statsKey = $derived($fieldSurveyRetained ? 'retained' : $fieldSurveyMode);
 	let activeFieldMode = $derived(step.fieldModes
-		? (step.fieldModes.find(m => m.id === $fieldSurveyMode) || step.fieldModes[0])
+		? (step.fieldModes.find(m => m.id === statsKey) || step.fieldModes[0])
 		: null);
-	let resolvedStats = $derived(activeFieldMode ? activeFieldMode.stats : step.stats);
+	// Field-survey stats are viewport-aware: pick the active area + key from the
+	// pre-computed areaStats, falling back to the mode's static stats if unavailable.
+	let resolvedStats = $derived.by(() => {
+		if (!activeFieldMode) return step.stats;
+		const areaBlock = $fieldSurveyStats?.[$fieldSurveyArea]?.[statsKey];
+		return areaBlock ?? activeFieldMode.stats;
+	});
 	let resolvedDescription = $derived(activeFieldMode ? activeFieldMode.description : step.description);
 
 	let dynamicStats = $derived.by(() => {
@@ -169,6 +181,13 @@
 				<p class="card-subtitle">{step.subtitle}</p>
 			{/if}
 
+			{#if areaLabel}
+				<div class="area-chip">
+					<span class="area-dot"></span>
+					{areaLabel}
+				</div>
+			{/if}
+
 			{#if dynamicStats.length}
 				<div class="stats-grid">
 					{#each dynamicStats as stat, i}
@@ -315,6 +334,29 @@
 		margin: 0 0 18px;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+	}
+
+	.area-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		margin: 0 0 16px;
+		padding: 5px 11px;
+		background: rgba(0, 206, 209, 0.12);
+		border: 1px solid rgba(0, 206, 209, 0.3);
+		border-radius: 20px;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #00CED1;
+		letter-spacing: 0.3px;
+	}
+
+	.area-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #00CED1;
+		box-shadow: 0 0 6px rgba(0, 206, 209, 0.8);
 	}
 
 	.stats-grid {

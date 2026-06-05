@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Local tooling / binaries (re-downloadable; not part of the app)
+poppler/
+poppler.zip
+
+# Claude Code local settings & worktrees
+.claude/
+
+# Raw GIS source data — large re-downloadable OSM extracts, processed into
+# app/static/data/wgs84/*.geojson. Not referenced by the app or the build.
+Yerevan Shapes/
+
+# Build output
+build/
+.svelte-kit/

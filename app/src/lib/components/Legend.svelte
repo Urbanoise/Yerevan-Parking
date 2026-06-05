@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -16,11 +16,20 @@
 	let topCategories = $derived(stepConfig.topCategories ?? []);
 	let showCurrentToggle = $derived(stepConfig.showCurrentToggle ?? false);
 	let showSensitivityToggle = $derived(stepConfig.showSensitivityToggle ?? false);
-	// Field-survey lens toggle: a 3-way mode selector (occupancy / paid-free /
-	// retained). The active mode supplies the static key shown below the toggle.
+	// Field-survey lens toggle. The plain lenses (avg occupancy / paid-free) sit in a
+	// segmented control; any mode flagged `isSwitch` (retained/removed) renders as a
+	// standalone switch bar below it. The active mode supplies the static key shown below.
 	let fieldModes = $derived(stepConfig.fieldModes ?? null);
+	let lensModes = $derived(fieldModes ? fieldModes.filter(m => !m.isSwitch) : null);
+	let switchMode = $derived(fieldModes ? fieldModes.find(m => m.isSwitch) : null);
 	let activeFieldMode = $derived(fieldModes ? (fieldModes.find(m => m.id === $fieldSurveyMode) || fieldModes[0]) : null);
 	let staticKey = $derived(activeFieldMode ? activeFieldMode.staticKey : (stepConfig.staticKey ?? null));
+
+	// The retained/removed switch is an independent filter on top of the active lens —
+	// it hides removed paths without changing the lens (occupancy / paid-free).
+	function toggleFieldSwitch() {
+		fieldSurveyRetained.update(v => !v);
+	}
 
 	function onTopSliderInput(e) {
 		const idx = Number(e.target.value);
@@ -55,9 +64,10 @@
 			if (!step.showSensitivityToggle) {
 				showSensitivityZones.set(false);
 			}
-			// Reset the field-survey lens to the step's default when entering it.
+			// Reset the field-survey lens + retained filter when entering the step.
 			if (step.fieldModes) {
 				fieldSurveyMode.set(step.defaultFieldMode ?? step.fieldModes[0].id);
+				fieldSurveyRetained.set(false);
 			}
 		} else {
 			activeLegendFilters.set(null);
@@ -93,7 +103,7 @@
 		{#if fieldModes}
 			<div class="legend-title">View <span class="legend-hint">switch lens</span></div>
 			<div class="mode-toggle">
-				{#each fieldModes as mode}
+				{#each lensModes as mode}
 					<button
 						class="mode-btn"
 						class:active={$fieldSurveyMode === mode.id}
@@ -102,6 +112,17 @@
 					>{mode.label}</button>
 				{/each}
 			</div>
+			{#if switchMode}
+				<button
+					class="field-switch"
+					class:on={$fieldSurveyRetained}
+					onclick={toggleFieldSwitch}
+					aria-pressed={$fieldSurveyRetained}
+				>
+					<span class="field-switch-track"><span class="field-switch-thumb"></span></span>
+					<span class="field-switch-label">{switchMode.label}</span>
+				</button>
+			{/if}
 		{/if}
 
 		{#if staticKey}
@@ -259,6 +280,74 @@
 		font-weight: 600;
 	}
 
+	/* Retained / Removed switch bar — a full-width toggle that sits below the lens
+	   segment and reads as a distinct on/off control rather than a third lens. */
+	.field-switch {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		margin-bottom: 14px;
+		padding: 8px 10px;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 9px;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	.field-switch:hover {
+		background: rgba(255, 255, 255, 0.09);
+	}
+
+	.field-switch.on {
+		background: rgba(76, 175, 80, 0.16);
+		border-color: rgba(76, 175, 80, 0.55);
+	}
+
+	.field-switch-track {
+		position: relative;
+		width: 34px;
+		height: 19px;
+		flex-shrink: 0;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 10px;
+		transition: background 0.2s ease;
+	}
+
+	.field-switch.on .field-switch-track {
+		background: #4CAF50;
+	}
+
+	.field-switch-thumb {
+		position: absolute;
+		top: 2.5px;
+		left: 2.5px;
+		width: 14px;
+		height: 14px;
+		background: #fff;
+		border-radius: 50%;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+		transition: transform 0.2s ease;
+	}
+
+	.field-switch.on .field-switch-thumb {
+		transform: translateX(15px);
+	}
+
+	.field-switch-label {
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: rgba(255, 255, 255, 0.6);
+		transition: color 0.15s;
+	}
+
+	.field-switch.on .field-switch-label {
+		color: #fff;
+		font-weight: 600;
+	}
+
 	.sensitivity-key {
 		margin-top: 8px;
 		display: flex;
@@ -340,7 +429,9 @@
 		border-radius: 12px;
 		backdrop-filter: blur(16px);
 		padding: 14px 16px;
-		min-width: 180px;
+		/* Fixed width so switching lenses / toggling filters never resizes the panel. */
+		width: 232px;
+		box-sizing: border-box;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 

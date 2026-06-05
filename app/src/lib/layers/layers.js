@@ -466,16 +466,14 @@ export const FIELD_SURVEYS_HIT = {
 	layout: { visibility: 'none' }
 };
 
-// KomitasCity off-street yard, shown alongside the Field Surveys paths.
-// Geometry and capacity (Space: 123) come from the existing parking-areas
-// feature (the Parking Regulation data), so it is sourced/filtered from there
-// rather than duplicated. Uses the same purple as off-street areas in the
-// Parking Regulation step (#7c4dff).
+// Off-street yards shown alongside the Field Surveys paths — KomitasCity (123) and
+// ShirazYard010 (71). Geometry, capacity and measured occupancy come from the
+// dedicated field-survey-yards.geojson (built by convert/compute). Uses the same
+// purple as off-street areas in the Parking Regulation step (#7c4dff).
 export const FIELD_SURVEY_YARD_FILL = {
 	id: 'field-survey-yard-fill',
 	type: 'fill',
-	source: 'parking-areas',
-	filter: ['==', ['get', 'name'], 'KomitasCity'],
+	source: 'field-survey-yards',
 	paint: {
 		'fill-color': '#7c4dff',
 		'fill-opacity': 0.35
@@ -486,8 +484,7 @@ export const FIELD_SURVEY_YARD_FILL = {
 export const FIELD_SURVEY_YARD_OUTLINE = {
 	id: 'field-survey-yard-outline',
 	type: 'line',
-	source: 'parking-areas',
-	filter: ['==', ['get', 'name'], 'KomitasCity'],
+	source: 'field-survey-yards',
 	paint: {
 		'line-color': '#7c4dff',
 		'line-width': 2,

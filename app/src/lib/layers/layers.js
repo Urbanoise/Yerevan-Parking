@@ -369,7 +369,7 @@ export const SENSITIVITY_ZONES = {
 	layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' }
 };
 
-// Field Surveys — renamed "(Zone NN)" survey paths in the Komitas area,
+// Field Surveys — renamed "(Zone NN)" survey paths across all four surveyed areas,
 // colored by parking regulation (same palette as the Parking Regulation step).
 export const FIELD_SURVEYS_LINES = {
 	id: 'field-surveys-lines',
@@ -466,8 +466,9 @@ export const FIELD_SURVEYS_HIT = {
 	layout: { visibility: 'none' }
 };
 
-// Off-street yards shown alongside the Field Surveys paths — KomitasCity (123) and
-// ShirazYard010 (71). Geometry, capacity and measured occupancy come from the
+// Off-street yards shown alongside the Field Surveys paths — one per area:
+// KomitasCity (123), ShirazYard010 (71), GNOFF (40, Garegin Nzhdeh) and Palace
+// (32, Mega Mall). Geometry, capacity and measured occupancy come from the
 // dedicated field-survey-yards.geojson (built by convert/compute). Uses the same
 // purple as off-street areas in the Parking Regulation step (#7c4dff).
 export const FIELD_SURVEY_YARD_FILL = {

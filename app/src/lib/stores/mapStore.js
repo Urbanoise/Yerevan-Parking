@@ -22,9 +22,9 @@ export const fieldSurveyMode = writable('occupancy');
 // from whichever lens is active (the surviving network keeps its lens colouring).
 export const fieldSurveyRetained = writable(false);
 // Which surveyed area the Field Surveys dashboard is reporting on. Driven by the
-// viewport: 'all' when zoomed out enough to see both neighbourhoods, otherwise the
-// area the reader has zoomed into ('komitas' | 'shiraz').
+// viewport: 'all' when zoomed out enough to see every neighbourhood, otherwise the
+// area the reader has zoomed into ('garegin' | 'mega' | 'komitas' | 'shiraz').
 export const fieldSurveyArea = writable('all');
 // Per-area, per-mode dashboard stat blocks, loaded from field-surveys.geojson's
-// `areaStats`. Shape: { all|komitas|shiraz: { occupancy|paidfree|retained: [...] } }.
+// `areaStats`. Shape: { all|garegin|mega|komitas|shiraz: { occupancy|paidfree|retained: [...] } }.
 export const fieldSurveyStats = writable(null);

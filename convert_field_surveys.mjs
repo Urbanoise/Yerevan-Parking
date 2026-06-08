@@ -2,28 +2,32 @@ import { readFileSync, writeFileSync } from 'fs';
 import XLSX from 'xlsx';
 
 // Extract the renamed survey paths — those whose name contains "(Zone NN)" — from
-// the Field Surveys KML. The survey now spans two areas:
-//   • Komitas      — zones 70–122  (Parking Survey Sheet v5)
+// the Field Surveys KML. The survey now spans four areas:
+//   • Garegin Nzhdeh   — zones 25–59   (Garegin Nzhdeh St - Analysis)
+//   • Mega Mall        — zones 60–69   (Mega Mall - Analysis)
+//   • Komitas          — zones 70–122  (Parking Survey Sheet v5)
 //   • Shiraz/Hasratyan — zones 123–156 (Shiraz, Hasratyan - Analysis)
 // Each path is tagged with an `area` so the Field Surveys story step can resolve
-// per-area dashboard numbers as the reader zooms between the two neighbourhoods.
+// per-area dashboard numbers as the reader zooms between the neighbourhoods.
 //
-// The KML is the "Field Surveys 05062026.kmz" unzipped to a plain .kml:
-//   unzip -p "Field Surveys 05062026.kmz" doc.kml > "Field Surveys 05062026.kml"
-const KML_PATH = 'Field Surveys/Field Surveys 05062026.kml';
+// The KML is the "Field Surveys 08062026.kmz" unzipped to a plain .kml:
+//   unzip -p "Field Surveys 08062026.kmz" doc.kml > "Field Surveys 08062026.kml"
+const KML_PATH = 'Field Surveys/Field Surveys 08062026.kml';
 const kml = readFileSync(KML_PATH, 'utf8');
 
-// Zone → area split. Komitas is the original survey (70–122); the new Shiraz/
-// Hasratyan corridor adds 123–156.
-const SHIRAZ_MIN = 123;
-const SHIRAZ_MAX = 156;
-const areaOfZone = (z) => (z >= SHIRAZ_MIN && z <= SHIRAZ_MAX ? 'shiraz' : 'komitas');
+// Zone → area split. Each surveyed neighbourhood owns a contiguous zone range.
+const areaOfZone = (z) =>
+	z <= 59 ? 'garegin' :
+	z <= 69 ? 'mega' :
+	z <= 122 ? 'komitas' :
+	'shiraz';
 
 // Post-BRT retain/remove decision per zone comes from the "RetainedRemoved" sheet
 // of the Komitas survey workbook (columns: Zone | Retained/Removed). Build a zone →
 // flag lookup so each survey path can be colored by whether it survives the BRT
-// redesign. The Shiraz/Hasratyan zones are outside every BRT corridor, so nothing
-// there is removed — they default to "retained" (see below).
+// redesign. Only Komitas overlaps the BRT corridors; the Garegin, Mega Mall and
+// Shiraz/Hasratyan zones sit outside every corridor, so nothing there is removed —
+// they default to "retained" (see below).
 const wb = XLSX.readFile('Field Surveys/Parking Survey Sheet v5.xlsx');
 const retainedRows = XLSX.utils.sheet_to_json(wb.Sheets['RetainedRemoved'], { header: 1, blankrows: false });
 const retainedByZone = {};
@@ -116,18 +120,30 @@ function resolveRegulation(placemarkXml) {
 const features = [];
 const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemark>/g)];
 
-// Capture the ShirazYard010 off-street lot polygon while sweeping the placemarks —
-// it is the Shiraz/Hasratyan counterpart to the KomitasCity yard.
-let shirazYardCoords = null;
+// Off-street lot polygons captured straight from the KML, one per non-Komitas area.
+// Each yard is the off-street counterpart to that area's on-street zones; the survey
+// workbook's off-street occupancy log keys to it in compute_field_survey_metrics.mjs.
+//   • ShirazYard010 — Shiraz/Hasratyan (71 spaces, capacity from KML)
+//   • GNOFF         — Garegin Nzhdeh off-street (40 spaces)
+//   • Palace        — Mega Mall, the "P" off-street log (32 spaces)
+// `match` is the exact KML placemark name; `space` overrides any KML capacity so the
+// figures stay aligned with the survey team's agreed lot sizes.
+const KML_YARDS = [
+	{ name: 'ShirazYard010', area: 'shiraz', match: 'ShirazYard010', space: 71 },
+	{ name: 'GNOFF', area: 'garegin', match: 'GNOFF', space: 40 },
+	{ name: 'Palace', area: 'mega', match: 'Palace', space: 32 },
+];
+const kmlYardCoords = {}; // yard name -> ring coordinates
 
 for (const pm of placemarkMatches) {
 	const content = pm[1];
 	const name = extractText(content, 'name');
 	if (!name) continue;
 
-	if (/^ShirazYard010\s*$/.test(name.trim())) {
+	const yardDef = KML_YARDS.find(y => y.match === name.trim());
+	if (yardDef && /<Polygon>/.test(content)) {
 		const cs = extractText(content, 'coordinates');
-		if (cs) shirazYardCoords = parseCoordinates(cs);
+		if (cs) kmlYardCoords[yardDef.name] = parseCoordinates(cs);
 	}
 
 	const zoneMatch = name.match(/\(\s*Zone\s+(\d+)\s*\)/i);
@@ -143,9 +159,9 @@ for (const pm of placemarkMatches) {
 	const zone = parseInt(zoneMatch[1], 10);
 	const area = areaOfZone(zone);
 
-	// Komitas keeps the surveyed RetainedRemoved decision; Shiraz/Hasratyan sits
-	// outside every BRT corridor, so all of its on-street parking is retained.
-	const retained = area === 'shiraz' ? 'retained' : (retainedByZone[zone] ?? null);
+	// Komitas keeps the surveyed RetainedRemoved decision; the other areas sit
+	// outside every BRT corridor, so all of their on-street parking is retained.
+	const retained = area === 'komitas' ? (retainedByZone[zone] ?? null) : 'retained';
 
 	const props = {
 		name: name.trim(),
@@ -170,11 +186,10 @@ for (const pm of placemarkMatches) {
 const geojson = { type: 'FeatureCollection', features };
 
 // --- Off-street yards shown alongside the survey paths ---
-// One per area: KomitasCity (123 spaces) and ShirazYard010 (71 spaces). KomitasCity
-// geometry comes from the existing parking-areas inventory; ShirazYard010 from the
-// survey KML polygon captured above. compute_field_survey_metrics.mjs stamps each
-// yard with its measured occupancy afterwards.
-const SHIRAZ_YARD_SPACES = 71;
+// One per area. KomitasCity (123 spaces) geometry comes from the existing parking-
+// areas inventory; the other three (ShirazYard010, GNOFF, Palace) from the survey
+// KML polygons captured above. compute_field_survey_metrics.mjs stamps each yard
+// with its measured occupancy afterwards.
 const areasGeo = JSON.parse(readFileSync('app/static/data/wgs84/parking-areas.geojson', 'utf8'));
 const komitasCity = areasGeo.features.find(f => (f.properties.name || '') === 'KomitasCity');
 
@@ -190,20 +205,23 @@ if (komitasCity) {
 } else {
 	console.warn('WARNING: KomitasCity not found in parking-areas.geojson');
 }
-if (shirazYardCoords) {
-	yardFeatures.push({
-		type: 'Feature',
-		geometry: { type: 'Polygon', coordinates: [shirazYardCoords] },
-		properties: { name: 'ShirazYard010', area: 'shiraz', space: SHIRAZ_YARD_SPACES },
-	});
-} else {
-	console.warn('WARNING: ShirazYard010 polygon not found in KML');
+for (const y of KML_YARDS) {
+	const ring = kmlYardCoords[y.name];
+	if (ring) {
+		yardFeatures.push({
+			type: 'Feature',
+			geometry: { type: 'Polygon', coordinates: [ring] },
+			properties: { name: y.name, area: y.area, space: y.space },
+		});
+	} else {
+		console.warn(`WARNING: ${y.name} polygon ("${y.match}") not found in KML`);
+	}
 }
 const yardsGeojson = { type: 'FeatureCollection', features: yardFeatures };
 
 // --- Report ---
 const byArea = (a) => features.filter(f => f.properties.area === a);
-for (const area of ['komitas', 'shiraz']) {
+for (const area of ['garegin', 'mega', 'komitas', 'shiraz']) {
 	const fs = byArea(area);
 	const totalSpaces = fs.reduce((s, f) => s + (f.properties.space || 0), 0);
 	const regCounts = fs.reduce((acc, f) => { acc[f.properties.regulation] = (acc[f.properties.regulation] || 0) + 1; return acc; }, {});

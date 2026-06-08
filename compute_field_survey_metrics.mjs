@@ -5,12 +5,16 @@ import xlsx from 'xlsx';
 // off-street yards, and pre-compute the per-area dashboard stat blocks the Field
 // Surveys story step shows as the reader zooms between neighbourhoods.
 //
-// Two source workbooks, one per surveyed area, both with a "United Data" sheet — a
+// Four source workbooks, one per surveyed area, all with a "United Data" sheet — a
 // license-plate occupancy log where each row is one vehicle seen in one zone at one
 // hour. The license plate reconstructs each vehicle's duration and a zone's
 // turnover; the zone number joins 1:1 to the survey paths' `zone` property. Formal
 // (striped) capacity comes from the geojson `space` field, so occupancy/turnover
 // are measured against the legal supply already on the map.
+//   • Garegin Nzhdeh   — Garegin Nzhdeh St - Analysis (zones 25–59, 7:00–23:00)
+//                         off-street log labelled "Off-street" → GNOFF yard
+//   • Mega Mall        — Mega Mall - Analysis (zones 60–69, 7:00–22:00)
+//                         off-street log labelled "P" (Palace lot) → Palace yard
 //   • Komitas          — Parking Survey Sheet v5  (zones 70–122, 7:00–23:00)
 //                         off-street log labelled "Off street city" → KomitasCity yard
 //   • Shiraz/Hasratyan — Shiraz, Hasratyan - Analysis (zones 123–156, 7:00–24:00)
@@ -20,8 +24,10 @@ const GEOJSON_PATH = 'app/static/data/wgs84/field-surveys.geojson';
 const YARDS_PATH = 'app/static/data/wgs84/field-survey-yards.geojson';
 
 // Each source's United Data sheet, the area it feeds, and the off-street log label
-// that maps to that area's yard.
+// that maps to that area's yard. Areas render outer→inner in the dashboard order.
 const SOURCES = [
+	{ area: 'garegin', file: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx', offLabel: 'Off-street', yard: 'GNOFF' },
+	{ area: 'mega', file: 'Field Surveys/Mega Mall - Analysis.xlsx', offLabel: 'P', yard: 'Palace' },
 	{ area: 'komitas', file: 'Field Surveys/Parking Survey Sheet v5.xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
 	{ area: 'shiraz', file: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx', offLabel: 'Shiraz off-street', yard: 'ShirazYard010' },
 ];
@@ -65,8 +71,8 @@ function parseUnitedData(file, offLabel) {
 		if (typeof zone === 'number') {
 			key = zone;
 			windowHours.add(time);
-		} else if (typeof zone === 'string' && zone.trim() === offLabel) {
-			key = offLabel; // the off-street yard log
+		} else if (typeof zone === 'string' && zone.trim().toLowerCase() === offLabel.toLowerCase()) {
+			key = offLabel; // the off-street yard log (label may vary in case, e.g. "P"/"p")
 		} else {
 			continue; // stray / unrelated rows
 		}
@@ -186,9 +192,12 @@ function statsForArea(areaKey) {
 	const yardSpaces = areaKey === 'all'
 		? yards.features.reduce((s, y) => s + (y.properties.space || 0), 0)
 		: (yardByArea[areaKey]?.space || 0);
-	const yardLabel = areaKey === 'shiraz' ? 'ShirazYard010 Yard'
-		: areaKey === 'komitas' ? 'KomitasCity Yard'
-		: 'Off-Street Yards';
+	const yardLabel = {
+		garegin: 'GNOFF Yard',
+		mega: 'Palace Yard',
+		komitas: 'KomitasCity Yard',
+		shiraz: 'ShirazYard010 Yard',
+	}[areaKey] || 'Off-Street Yards';
 
 	return {
 		occupancy: [
@@ -212,7 +221,13 @@ function statsForArea(areaKey) {
 	};
 }
 
-const areaStats = { all: statsForArea('all'), komitas: statsForArea('komitas'), shiraz: statsForArea('shiraz') };
+const areaStats = {
+	all: statsForArea('all'),
+	garegin: statsForArea('garegin'),
+	mega: statsForArea('mega'),
+	komitas: statsForArea('komitas'),
+	shiraz: statsForArea('shiraz'),
+};
 geojson.areaStats = areaStats;
 
 writeFileSync(GEOJSON_PATH, JSON.stringify(geojson));
@@ -221,7 +236,7 @@ writeFileSync(YARDS_PATH, JSON.stringify(yards));
 // --- Report ---
 console.log(`Survey paths: ${geojson.features.length}  matched to survey data: ${matched}`);
 if (missing.length) console.log(`No survey rows for zones: ${missing.join(', ')}`);
-for (const area of ['komitas', 'shiraz', 'all']) {
+for (const area of ['garegin', 'mega', 'komitas', 'shiraz', 'all']) {
 	const o = areaStats[area].occupancy;
 	console.log(`[${area}] mean occ ${o[0].value}%  over-cap ${o[1].value}  under-50 ${o[2].value}  off-carriageway ${o[3].value}%`);
 }

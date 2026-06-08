@@ -261,9 +261,9 @@ export const STORY_STEPS = [
 	{
 		index: 9,
 		title: 'Field Surveys',
-		subtitle: 'Survey paths in two areas — zoom in to compare',
-		center: [44.4911, 40.2011],
-		zoom: 12.5,
+		subtitle: 'Survey paths across four areas — zoom in to compare',
+		center: [44.516, 40.178],
+		zoom: 11.6,
 		pitch: 0,
 		bearing: 0,
 		showLines: false,
@@ -272,15 +272,16 @@ export const STORY_STEPS = [
 		showLandmarks: false,
 		showFieldSurveys: true,
 		legendVisible: false,
-		// Merged Field Surveys step. The renamed "(Zone NN)" survey paths span two
-		// areas — Komitas (zones 70–122) and Shiraz/Hasratyan (zones 123–156) — each
-		// with its off-street yard (KomitasCity / ShirazYard010). They can be viewed
-		// through three lenses, switched with a toggle in the legend panel: average
-		// daily occupancy, parking regulation (paid/free), and the post-BRT retain/
-		// remove decision. Each mode carries its own colorMode, static key, stats and
-		// description; defaultFieldMode sets the initial view. The stats below are
-		// fallbacks — live dashboard numbers are viewport-aware and resolved from the
-		// areaStats embedded in field-surveys.geojson as the reader zooms between areas.
+		// Merged Field Surveys step. The renamed "(Zone NN)" survey paths span four
+		// areas — Garegin Nzhdeh (zones 25–59), Mega Mall (60–69), Komitas (70–122) and
+		// Shiraz/Hasratyan (123–156) — each with its off-street yard (GNOFF / Palace /
+		// KomitasCity / ShirazYard010). They can be viewed through three lenses,
+		// switched with a toggle in the legend panel: average daily occupancy, parking
+		// regulation (paid/free), and the post-BRT retain/remove decision. Each mode
+		// carries its own colorMode, static key, stats and description; defaultFieldMode
+		// sets the initial view. The stats below are fallbacks — live dashboard numbers
+		// are viewport-aware and resolved from the areaStats embedded in
+		// field-surveys.geojson as the reader zooms between areas.
 		fieldSurveyToggle: true,
 		defaultFieldMode: 'occupancy',
 		fieldModes: [
@@ -299,10 +300,10 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 56, label: 'Mean Occupancy %', color: '#2ecc71' },
-					{ value: 2, label: 'Zones Over Capacity', color: '#ff1f44' },
-					{ value: 26, label: 'Zones Under 50% (slack)', color: '#cddc39' },
-					{ value: 35, label: 'Parked Off-Carriageway %', color: '#00e5ff' },
+					{ value: 55, label: 'Mean Occupancy %', color: '#2ecc71' },
+					{ value: 10, label: 'Zones Over Capacity', color: '#ff1f44' },
+					{ value: 63, label: 'Zones Under 50% (slack)', color: '#cddc39' },
+					{ value: 24, label: 'Parked Off-Carriageway %', color: '#00e5ff' },
 				],
 			},
 			{
@@ -318,10 +319,10 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 53, label: 'Survey Paths', color: '#00e5ff' },
-					{ value: 174, label: 'White Spaces', color: '#ffffff' },
+					{ value: 126, label: 'Survey Paths', color: '#00e5ff' },
+					{ value: 1133, label: 'White Spaces', color: '#ffffff' },
 					{ value: 276, label: 'Blue Spaces', color: '#42a5f5' },
-					{ value: 123, label: 'KomitasCity Yard', color: '#7c4dff' },
+					{ value: 266, label: 'Off-Street Yards', color: '#7c4dff' },
 				],
 			},
 			{
@@ -343,10 +344,10 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 342, label: 'Retained Spaces', color: '#4CAF50' },
+					{ value: 1301, label: 'Retained Spaces', color: '#4CAF50' },
 					{ value: 108, label: 'Removed Spaces', color: '#EF5350' },
-					{ value: 76, label: '% Spaces Retained', color: '#4CAF50' },
-					{ value: 39, label: 'Retained Paths', color: '#00e5ff' },
+					{ value: 92, label: '% Spaces Retained', color: '#4CAF50' },
+					{ value: 112, label: 'Retained Paths', color: '#00e5ff' },
 				],
 			},
 		],

@@ -7,11 +7,16 @@
 
 	const MAX_TOP_LOTS = 50;
 
-	// Field Surveys viewport→area detection. The step shows both surveyed areas at
+	// Field Surveys viewport→area detection. The step shows all surveyed areas at
 	// once; once the reader zooms past FS_AREA_ZOOM the dashboard settles on whichever
 	// neighbourhood centroid is nearest, otherwise it reports the combined ('all') view.
 	const FS_AREA_ZOOM = 13.3;
-	const FS_AREA_CENTROIDS = { komitas: [44.5173, 40.2066], shiraz: [44.4649, 40.1956] };
+	const FS_AREA_CENTROIDS = {
+		garegin: [44.4854, 40.1510],
+		mega: [44.5677, 40.1978],
+		komitas: [44.5173, 40.2066],
+		shiraz: [44.4649, 40.1956],
+	};
 
 	let mapContainer;
 	let map = null;
@@ -114,8 +119,9 @@
 		map.setFilter('field-surveys-occupancy', retainedOnly);
 		map.setFilter('field-surveys-lines', retainedOnly);
 		map.setFilter('field-surveys-hit', retainedOnly);
-		// Both off-street yards (KomitasCity / ShirazYard010) are always retained, so the
-		// removed filter never touches them — they stay visible in every lens.
+		// All four off-street yards (KomitasCity / ShirazYard010 / GNOFF / Palace) are
+		// always retained, so the removed filter never touches them — they stay visible
+		// in every lens.
 		map.setLayoutProperty('field-survey-yard-fill', 'visibility', showFS ? 'visible' : 'none');
 		map.setLayoutProperty('field-survey-yard-outline', 'visibility', showFS ? 'visible' : 'none');
 		// In the occupancy lens, color the yard by its average occupancy on the same ramp
@@ -521,7 +527,7 @@
 			// Popups for field-survey paths — show the survey occupancy metrics
 			map.on('click', 'field-surveys-hit', (e) => showParkingPopup(e, '#00e5ff', true));
 
-			// Popup for the off-street yards (KomitasCity / ShirazYard010) — shows occupancy analysis
+			// Popup for the off-street yards (KomitasCity / ShirazYard010 / GNOFF / Palace) — shows occupancy analysis
 			map.on('click', 'field-survey-yard-fill', (e) => showParkingPopup(e, '#7c4dff', true));
 
 			// Popups for corridors

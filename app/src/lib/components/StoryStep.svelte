@@ -10,7 +10,7 @@
 
 	let statEls = $state([]);
 
-	const AREA_LABELS = { all: 'Both areas', komitas: 'Komitas', shiraz: 'Shiraz & Hasratyan' };
+	const AREA_LABELS = { all: 'All areas', garegin: 'Garegin Nzhdeh', mega: 'Mega Mall', komitas: 'Komitas', shiraz: 'Shiraz & Hasratyan' };
 	// On the Field Surveys step the dashboard names the area the reader has zoomed into.
 	let areaLabel = $derived(step.showFieldSurveys ? (AREA_LABELS[$fieldSurveyArea] ?? null) : null);
 

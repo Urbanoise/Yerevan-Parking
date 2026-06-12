@@ -12,6 +12,7 @@
 	// neighbourhood centroid is nearest, otherwise it reports the combined ('all') view.
 	const FS_AREA_ZOOM = 13.3;
 	const FS_AREA_CENTROIDS = {
+		malatia: [44.4528, 40.1742],
 		garegin: [44.4854, 40.1510],
 		mega: [44.5677, 40.1978],
 		komitas: [44.5173, 40.2066],

@@ -2,25 +2,35 @@ import { readFileSync, writeFileSync } from 'fs';
 import XLSX from 'xlsx';
 
 // Extract the renamed survey paths — those whose name contains "(Zone NN)" — from
-// the Field Surveys KML. The survey now spans four areas:
+// the Field Surveys KML. The survey now spans five areas:
+//   • Malatia-Sebastia — zones 2–24    (Malatia Sebastia - Analysis; Sebastia/Raffi)
 //   • Garegin Nzhdeh   — zones 25–59   (Garegin Nzhdeh St - Analysis)
 //   • Mega Mall        — zones 60–69   (Mega Mall - Analysis)
 //   • Komitas          — zones 70–122  (Parking Survey Sheet v5)
 //   • Shiraz/Hasratyan — zones 123–156 (Shiraz, Hasratyan - Analysis)
 // Each path is tagged with an `area` so the Field Surveys story step can resolve
 // per-area dashboard numbers as the reader zooms between the neighbourhoods.
+// Note: the Sebastia *street* also runs through the Shiraz area (zones 123+), so the
+// new district uses the key `malatia` (Malatia-Sebastia) to avoid colliding with it.
 //
-// The KML is the "Field Surveys 08062026.kmz" unzipped to a plain .kml:
-//   unzip -p "Field Surveys 08062026.kmz" doc.kml > "Field Surveys 08062026.kml"
-const KML_PATH = 'Field Surveys/Field Surveys 08062026.kml';
+// The KML is the "Field Surveys 12062026.kmz" unzipped to a plain .kml:
+//   unzip -p "Field Surveys 12062026.kmz" doc.kml > "Field Surveys 12062026.kml"
+const KML_PATH = 'Field Surveys/Field Surveys 12062026.kml';
 const kml = readFileSync(KML_PATH, 'utf8');
 
 // Zone → area split. Each surveyed neighbourhood owns a contiguous zone range.
 const areaOfZone = (z) =>
+	z <= 24 ? 'malatia' :
 	z <= 59 ? 'garegin' :
 	z <= 69 ? 'mega' :
 	z <= 122 ? 'komitas' :
 	'shiraz';
+
+// Zones to drop from the map even though they carry a "(Zone NN)" path. Zone 40
+// (Garegin, BagratunyacYeghbairutyan) was never covered by the occupancy survey —
+// the workbook skips it (39 → 41) — so it would render with no occupancy. Excluded
+// by request rather than relying on the surveyor deleting the KMZ path.
+const EXCLUDED_ZONES = new Set([40]);
 
 // Post-BRT retain/remove decision per zone comes from the "RetainedRemoved" sheet
 // of the Komitas survey workbook (columns: Zone | Retained/Removed). Build a zone →
@@ -55,6 +65,23 @@ function parseCoordinates(coordStr) {
 		const [lng, lat] = pt.split(',').map(Number);
 		return [lng, lat];
 	});
+}
+
+// Geodesic length of a lng/lat path in metres (haversine summed over segments).
+// Used to estimate striped capacity for paths the surveyor left without a "Space"
+// field: spaces ≈ length / 7.5 m (one parallel bay per 7.5 m of kerb).
+const SPACE_METRES = 7.5;
+function pathLengthMeters(coords) {
+	const R = 6371000, toRad = (d) => (d * Math.PI) / 180;
+	let total = 0;
+	for (let i = 1; i < coords.length; i++) {
+		const [lng1, lat1] = coords[i - 1];
+		const [lng2, lat2] = coords[i];
+		const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+		const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+		total += 2 * R * Math.asin(Math.sqrt(a));
+	}
+	return total;
 }
 
 // Pull a "Label: Value" field out of the HTML description, stripping HTML
@@ -123,15 +150,19 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 // Off-street lot polygons captured straight from the KML, one per non-Komitas area.
 // Each yard is the off-street counterpart to that area's on-street zones; the survey
 // workbook's off-street occupancy log keys to it in compute_field_survey_metrics.mjs.
-//   • ShirazYard010 — Shiraz/Hasratyan (71 spaces, capacity from KML)
-//   • GNOFF         — Garegin Nzhdeh off-street (40 spaces)
-//   • Palace        — Mega Mall, the "P" off-street log (32 spaces)
+//   • ShirazYard010   — Shiraz/Hasratyan (71 spaces, capacity from KML)
+//   • GNOFF           — Garegin Nzhdeh off-street (40 spaces)
+//   • Palace          — Mega Mall, the "P" off-street log (32 spaces)
+//   • SebastiaYard006 — Malatia-Sebastia, the "Off-street" log (101 spaces, KML capacity)
 // `match` is the exact KML placemark name; `space` overrides any KML capacity so the
-// figures stay aligned with the survey team's agreed lot sizes.
+// figures stay aligned with the survey team's agreed lot sizes. Note SebastiaYard006
+// exists twice in the KML (an off-street Polygon + an on-street LineString); the
+// Polygon-only guard below selects the lot.
 const KML_YARDS = [
 	{ name: 'ShirazYard010', area: 'shiraz', match: 'ShirazYard010', space: 71 },
 	{ name: 'GNOFF', area: 'garegin', match: 'GNOFF', space: 40 },
 	{ name: 'Palace', area: 'mega', match: 'Palace', space: 32 },
+	{ name: 'SebastiaYard006', area: 'malatia', match: 'SebastiaYard006', space: 101 },
 ];
 const kmlYardCoords = {}; // yard name -> ring coordinates
 
@@ -146,8 +177,12 @@ for (const pm of placemarkMatches) {
 		if (cs) kmlYardCoords[yardDef.name] = parseCoordinates(cs);
 	}
 
-	const zoneMatch = name.match(/\(\s*Zone\s+(\d+)\s*\)/i);
-	if (!zoneMatch) continue; // only keep the renamed "(Zone NN)" paths
+	// Survey paths are tagged with their zone two ways: most as "StreetNNN (Zone NN)",
+	// but some (notably the Malatia-Sebastia infill) are named just "Zone NN". Accept
+	// both; every zone is defined exactly once across the KML, so this can't double-count.
+	const zoneMatch = name.match(/\(\s*Zone\s+(\d+)\s*\)/i) || name.match(/^Zone\s+(\d+)$/i);
+	if (!zoneMatch) continue;
+	if (EXCLUDED_ZONES.has(parseInt(zoneMatch[1], 10))) continue;
 
 	const coordStr = extractText(content, 'coordinates');
 	if (!coordStr) continue;
@@ -163,11 +198,19 @@ for (const pm of placemarkMatches) {
 	// outside every BRT corridor, so all of their on-street parking is retained.
 	const retained = area === 'komitas' ? (retainedByZone[zone] ?? null) : 'retained';
 
+	// Capacity from the KML "Space" field; if the surveyor left it blank (e.g. the
+	// Malatia-Sebastia "Zone NN" paths, drawn as bare geometry), estimate it from the
+	// path length at one bay per 7.5 m and flag it as estimated.
+	const kmlSpace = spaceStr ? parseInt(spaceStr, 10) || 0 : 0;
+	const spaceEstimated = kmlSpace <= 0;
+	const space = spaceEstimated ? Math.round(pathLengthMeters(coordinates) / SPACE_METRES) : kmlSpace;
+
 	const props = {
 		name: name.trim(),
 		zone,
 		area,
-		space: spaceStr ? parseInt(spaceStr, 10) || 0 : 0,
+		space,
+		space_estimated: spaceEstimated,
 		regulation: resolveRegulation(content),
 		method: descField(descRaw, 'Method'),
 		marking: descField(descRaw, 'Marking'),
@@ -221,7 +264,7 @@ const yardsGeojson = { type: 'FeatureCollection', features: yardFeatures };
 
 // --- Report ---
 const byArea = (a) => features.filter(f => f.properties.area === a);
-for (const area of ['garegin', 'mega', 'komitas', 'shiraz']) {
+for (const area of ['malatia', 'garegin', 'mega', 'komitas', 'shiraz']) {
 	const fs = byArea(area);
 	const totalSpaces = fs.reduce((s, f) => s + (f.properties.space || 0), 0);
 	const regCounts = fs.reduce((acc, f) => { acc[f.properties.regulation] = (acc[f.properties.regulation] || 0) + 1; return acc; }, {});

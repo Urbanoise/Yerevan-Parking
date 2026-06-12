@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS, OCCUPANCY_COLOR } from '$lib/layers/layers.js';
@@ -13,6 +13,7 @@
 	const FS_AREA_ZOOM = 13.3;
 	const FS_AREA_CENTROIDS = {
 		malatia: [44.4528, 40.1742],
+		kentron: [44.5195, 40.1818],
 		garegin: [44.4854, 40.1510],
 		mega: [44.5677, 40.1978],
 		komitas: [44.5173, 40.2066],
@@ -619,16 +620,22 @@
 		};
 	});
 
-	// React to step changes
+	// React to step changes. applyStepVisibility() reads the field-survey lens/retained
+	// stores internally; without untrack() this effect would subscribe to them and
+	// re-fire (with moveCamera defaulting to true) on every toggle, flying the camera
+	// back to the step's wide view. untrack() keeps this effect bound to step changes
+	// only — the lens/retained toggles are handled by their own no-camera effect below.
 	$effect(() => {
 		const step = $currentStep;
 		currentStepIdx = step;
 		if (map && $dataLoaded) {
-			applyStepVisibility(step);
-			// Entering a non-survey step? Reset to the combined view so the next time
-			// the survey step is shown it starts on 'all' until the camera settles.
-			if (!STORY_STEPS[step]?.showFieldSurveys) fieldSurveyArea.set('all');
-			else updateFieldSurveyArea();
+			untrack(() => {
+				applyStepVisibility(step);
+				// Entering a non-survey step? Reset to the combined view so the next time
+				// the survey step is shown it starts on 'all' until the camera settles.
+				if (!STORY_STEPS[step]?.showFieldSurveys) fieldSurveyArea.set('all');
+				else updateFieldSurveyArea();
+			});
 		}
 	});
 

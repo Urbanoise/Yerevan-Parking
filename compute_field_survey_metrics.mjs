@@ -29,6 +29,7 @@ const YARDS_PATH = 'app/static/data/wgs84/field-survey-yards.geojson';
 // "Off-street" log (101 spaces, see KML_YARDS in convert_field_surveys.mjs).
 const SOURCES = [
 	{ area: 'malatia', file: 'Field Surveys/Malatia Sebastia - Analysis.xlsx', offLabel: 'Off-street', yard: 'SebastiaYard006' },
+	{ area: 'kentron', file: 'Field Surveys/Kentron - Analysis.xlsx', offLabel: 'Off-street', yard: 'NalbandyanYard001' },
 	{ area: 'garegin', file: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx', offLabel: 'Off-street', yard: 'GNOFF' },
 	{ area: 'mega', file: 'Field Surveys/Mega Mall - Analysis.xlsx', offLabel: 'P', yard: 'Palace' },
 	{ area: 'komitas', file: 'Field Surveys/Parking Survey Sheet v5.xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
@@ -197,6 +198,7 @@ function statsForArea(areaKey) {
 		: (yardByArea[areaKey]?.space || 0);
 	const yardLabel = {
 		malatia: 'SebastiaYard006',
+		kentron: 'NalbandyanYard001',
 		garegin: 'GNOFF Yard',
 		mega: 'Palace Yard',
 		komitas: 'KomitasCity Yard',
@@ -228,6 +230,7 @@ function statsForArea(areaKey) {
 const areaStats = {
 	all: statsForArea('all'),
 	malatia: statsForArea('malatia'),
+	kentron: statsForArea('kentron'),
 	garegin: statsForArea('garegin'),
 	mega: statsForArea('mega'),
 	komitas: statsForArea('komitas'),
@@ -241,7 +244,7 @@ writeFileSync(YARDS_PATH, JSON.stringify(yards));
 // --- Report ---
 console.log(`Survey paths: ${geojson.features.length}  matched to survey data: ${matched}`);
 if (missing.length) console.log(`No survey rows for zones: ${missing.join(', ')}`);
-for (const area of ['malatia', 'garegin', 'mega', 'komitas', 'shiraz', 'all']) {
+for (const area of ['malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz', 'all']) {
 	const o = areaStats[area].occupancy;
 	console.log(`[${area}] mean occ ${o[0].value}%  over-cap ${o[1].value}  under-50 ${o[2].value}  off-carriageway ${o[3].value}%`);
 }

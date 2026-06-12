@@ -19,3 +19,5 @@ build/
 # Transient KMZ extraction dirs and Excel lock files
 _tmp_kmz_*/
 ~$*
+# Scratch-unzipped Excel/zip internals
+**/_x/

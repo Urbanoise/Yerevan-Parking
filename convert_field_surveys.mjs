@@ -18,13 +18,37 @@ import XLSX from 'xlsx';
 const KML_PATH = 'Field Surveys/Field Surveys 12062026.kml';
 const kml = readFileSync(KML_PATH, 'utf8');
 
-// Zone → area split. Each surveyed neighbourhood owns a contiguous zone range.
+// Zone → area split for the LEGACY plain-numeric tags ("(Zone 23)"). The first four
+// areas were numbered in contiguous global ranges, so the number alone names the area.
 const areaOfZone = (z) =>
 	z <= 24 ? 'malatia' :
 	z <= 59 ? 'garegin' :
 	z <= 69 ? 'mega' :
 	z <= 122 ? 'komitas' :
 	'shiraz';
+
+// Area-scoped zone codes for NEW areas. A path tagged "(Zone K01)" belongs to area
+// code "K" (Kentron), zone 1 — the letter prefix is that area's private namespace, so
+// each new area restarts its numbering at 1 with no risk of colliding with the legacy
+// numeric zones above (or with each other). Add a row here per new lettered area; the
+// digits after the code join 1:1 to that area's survey workbook zone numbers.
+const AREA_CODES = { K: 'kentron' };
+
+// Resolve a placemark name to { area, zone } or null. Accepts the tag parenthesised
+// ("Street (Zone K01)") or bare ("Zone K01"), lettered (new areas) or plain (legacy).
+function resolveZoneTag(name) {
+	const m = name.match(/\(\s*Zone\s+([A-Za-z]*)\s*(\d+)\s*\)/i) || name.match(/^Zone\s+([A-Za-z]*)\s*(\d+)$/i);
+	if (!m) return null;
+	const code = m[1].toUpperCase();
+	const zone = parseInt(m[2], 10);
+	if (code) {
+		const area = AREA_CODES[code];
+		if (!area) { console.warn(`WARNING: unknown area code "${code}" in "${name.trim()}" — path skipped`); return null; }
+		return { area, zone };
+	}
+	if (EXCLUDED_ZONES.has(zone)) return null; // legacy numeric exclusions
+	return { area: areaOfZone(zone), zone };
+}
 
 // Zones to drop from the map even though they carry a "(Zone NN)" path. Zone 40
 // (Garegin, BagratunyacYeghbairutyan) was never covered by the occupancy survey —
@@ -145,6 +169,7 @@ function resolveRegulation(placemarkXml) {
 }
 
 const features = [];
+const seenZones = new Set(); // "area:zone" keys already taken, to catch double-tags
 const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemark>/g)];
 
 // Off-street lot polygons captured straight from the KML, one per non-Komitas area.
@@ -163,6 +188,7 @@ const KML_YARDS = [
 	{ name: 'GNOFF', area: 'garegin', match: 'GNOFF', space: 40 },
 	{ name: 'Palace', area: 'mega', match: 'Palace', space: 32 },
 	{ name: 'SebastiaYard006', area: 'malatia', match: 'SebastiaYard006', space: 101 },
+	{ name: 'NalbandyanYard001', area: 'kentron', match: 'NalbandyanYard001', space: 60 },
 ];
 const kmlYardCoords = {}; // yard name -> ring coordinates
 
@@ -177,12 +203,20 @@ for (const pm of placemarkMatches) {
 		if (cs) kmlYardCoords[yardDef.name] = parseCoordinates(cs);
 	}
 
-	// Survey paths are tagged with their zone two ways: most as "StreetNNN (Zone NN)",
-	// but some (notably the Malatia-Sebastia infill) are named just "Zone NN". Accept
-	// both; every zone is defined exactly once across the KML, so this can't double-count.
-	const zoneMatch = name.match(/\(\s*Zone\s+(\d+)\s*\)/i) || name.match(/^Zone\s+(\d+)$/i);
-	if (!zoneMatch) continue;
-	if (EXCLUDED_ZONES.has(parseInt(zoneMatch[1], 10))) continue;
+	// Resolve the zone tag. Names carry it parenthesised ("StreetNNN (Zone 23)") or
+	// bare ("Zone 23"); legacy areas use plain numbers, new areas a lettered code
+	// ("Zone K01"). resolveZoneTag returns the {area, zone} pair, the real survey key.
+	const tag = resolveZoneTag(name);
+	if (!tag) continue;
+	const { area, zone } = tag;
+
+	// Guard against accidental double-tagging: each (area, zone) must be unique.
+	const seenKey = `${area}:${zone}`;
+	if (seenZones.has(seenKey)) {
+		console.warn(`WARNING: duplicate ${area} zone ${zone} ("${name.trim()}") — already seen, second path ignored`);
+		continue;
+	}
+	seenZones.add(seenKey);
 
 	const coordStr = extractText(content, 'coordinates');
 	if (!coordStr) continue;
@@ -191,8 +225,6 @@ for (const pm of placemarkMatches) {
 
 	const descRaw = extractCDATA(content, 'description');
 	const spaceStr = descField(descRaw, 'Space');
-	const zone = parseInt(zoneMatch[1], 10);
-	const area = areaOfZone(zone);
 
 	// Komitas keeps the surveyed RetainedRemoved decision; the other areas sit
 	// outside every BRT corridor, so all of their on-street parking is retained.

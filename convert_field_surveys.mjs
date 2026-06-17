@@ -5,7 +5,7 @@ import XLSX from 'xlsx';
 // the Field Surveys KML. The survey now spans five areas:
 //   • Malatia-Sebastia — zones 2–24    (Malatia Sebastia - Analysis; Sebastia/Raffi)
 //   • Garegin Nzhdeh   — zones 25–59   (Garegin Nzhdeh St - Analysis)
-//   • Mega Mall        — zones 60–69   (Mega Mall - Analysis)
+//   • Gai Avenue       — zones 60–69   (Mega Mall - Analysis)
 //   • Komitas          — zones 70–122  (Parking Survey Sheet v5)
 //   • Shiraz/Hasratyan — zones 123–156 (Shiraz, Hasratyan - Analysis)
 // Each path is tagged with an `area` so the Field Surveys story step can resolve
@@ -56,21 +56,40 @@ function resolveZoneTag(name) {
 // by request rather than relying on the surveyor deleting the KMZ path.
 const EXCLUDED_ZONES = new Set([40]);
 
-// Post-BRT retain/remove decision per zone comes from the "RetainedRemoved" sheet
-// of the Komitas survey workbook (columns: Zone | Retained/Removed). Build a zone →
-// flag lookup so each survey path can be colored by whether it survives the BRT
-// redesign. Only Komitas overlaps the BRT corridors; the Garegin, Mega Mall and
-// Shiraz/Hasratyan zones sit outside every corridor, so nothing there is removed —
-// they default to "retained" (see below).
-const wb = XLSX.readFile('Field Surveys/Parking Survey Sheet v5.xlsx');
-const retainedRows = XLSX.utils.sheet_to_json(wb.Sheets['RetainedRemoved'], { header: 1, blankrows: false });
-const retainedByZone = {};
-for (const row of retainedRows.slice(1)) {
-	const zone = Number(row[0]);
-	const flag = String(row[1] ?? '').trim().toLowerCase();
-	if (Number.isFinite(zone) && (flag === 'retained' || flag === 'removed')) {
-		retainedByZone[zone] = flag;
+// Post-BRT retain/remove decision per zone comes from a "RetainedRemoved" sheet
+// (columns: Zone | Retained/Removed) in EACH area's survey workbook. Build a per-area
+// zone → flag lookup so every survey path can be coloured / counted by whether it
+// survives the redesign. Off-street rows (non-numeric Zone, e.g. "Off street city")
+// are skipped: off-street parking is always retained and yards aren't survey paths.
+// A zone with no entry — or an area whose workbook lacks the sheet — defaults to
+// retained.
+const RETAINED_SOURCES = {
+	malatia: 'Field Surveys/Malatia Sebastia - Analysis.xlsx',
+	kentron: 'Field Surveys/Kentron - Analysis.xlsx',
+	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx',
+	mega: 'Field Surveys/Mega Mall - Analysis.xlsx',
+	komitas: 'Field Surveys/Parking Survey Sheet v5.xlsx',
+	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx',
+};
+const retainedByArea = {};
+for (const [area, file] of Object.entries(RETAINED_SOURCES)) {
+	const wb = XLSX.readFile(file);
+	const sheetName = wb.SheetNames.find(n => /^retainedremoved$/i.test(n.trim()));
+	const map = {};
+	if (!sheetName) {
+		console.warn(`WARNING: ${area} workbook has no RetainedRemoved sheet — all its zones default to retained`);
+	} else {
+		const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, blankrows: false });
+		for (const row of rows.slice(1)) {
+			const zone = Number(row[0]);
+			const flag = String(row[1] ?? '').trim().toLowerCase();
+			if (Number.isFinite(zone) && (flag === 'retained' || flag === 'removed')) map[zone] = flag;
+		}
 	}
+	retainedByArea[area] = map;
+	const ret = Object.values(map).filter(v => v === 'retained').length;
+	const rem = Object.values(map).filter(v => v === 'removed').length;
+	console.log(`[retained] ${area}: ${ret} retained / ${rem} removed`);
 }
 
 function extractText(xml, tag) {
@@ -177,7 +196,7 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 // workbook's off-street occupancy log keys to it in compute_field_survey_metrics.mjs.
 //   • ShirazYard010   — Shiraz/Hasratyan (71 spaces, capacity from KML)
 //   • GNOFF           — Garegin Nzhdeh off-street (40 spaces)
-//   • Palace          — Mega Mall, the "P" off-street log (32 spaces)
+//   • Palace          — Gai Avenue, the "P" off-street log (32 spaces)
 //   • SebastiaYard006 — Malatia-Sebastia, the "Off-street" log (101 spaces, KML capacity)
 // `match` is the exact KML placemark name; `space` overrides any KML capacity so the
 // figures stay aligned with the survey team's agreed lot sizes. Note SebastiaYard006
@@ -226,9 +245,9 @@ for (const pm of placemarkMatches) {
 	const descRaw = extractCDATA(content, 'description');
 	const spaceStr = descField(descRaw, 'Space');
 
-	// Komitas keeps the surveyed RetainedRemoved decision; the other areas sit
-	// outside every BRT corridor, so all of their on-street parking is retained.
-	const retained = area === 'komitas' ? (retainedByZone[zone] ?? null) : 'retained';
+	// Each area's surveyed RetainedRemoved decision; a zone with no entry (or an area
+	// whose workbook lacks the sheet) defaults to retained.
+	const retained = retainedByArea[area]?.[zone] ?? 'retained';
 
 	// Capacity from the KML "Space" field; if the surveyor left it blank (e.g. the
 	// Malatia-Sebastia "Zone NN" paths, drawn as bare geometry), estimate it from the

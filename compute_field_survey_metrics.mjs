@@ -13,7 +13,7 @@ import xlsx from 'xlsx';
 // are measured against the legal supply already on the map.
 //   • Garegin Nzhdeh   — Garegin Nzhdeh St - Analysis (zones 25–59, 7:00–23:00)
 //                         off-street log labelled "Off-street" → GNOFF yard
-//   • Mega Mall        — Mega Mall - Analysis (zones 60–69, 7:00–22:00)
+//   • Gai Avenue       — Mega Mall - Analysis (zones 60–69, 7:00–22:00)
 //                         off-street log labelled "P" (Palace lot) → Palace yard
 //   • Komitas          — Parking Survey Sheet v5  (zones 70–122, 7:00–23:00)
 //                         off-street log labelled "Off street city" → KomitasCity yard
@@ -174,16 +174,18 @@ function statsForArea(areaKey) {
 	const fs = areaKey === 'all'
 		? geojson.features
 		: geojson.features.filter(f => f.properties.area === areaKey);
-	const occ = fs.map(f => f.properties.occupancy_pct).filter(v => v != null);
 
-	// Off-carriageway share, volume-weighted across the area's zones (matches the
-	// share a reader would get from the raw observation counts).
-	let offObs = 0, totObs = 0;
-	for (const f of fs) {
-		const src = sources[f.properties.area];
-		const o = src?.obs.get(f.properties.zone);
-		if (o) { offObs += o.offstreet; totObs += o.total; }
-	}
+	// Surveyed zones with a known formal capacity. We summarise occupancy at the
+	// PEAK hour (the only figure parking policy cares about) and weight by capacity
+	// so a 60-space corridor counts 20× a 3-space stub — unlike a plain mean of
+	// per-zone percentages, which lets tiny empty zones drag the headline down.
+	const surveyed = fs.filter(f => f.properties.peak_occupancy != null && (f.properties.space || 0) > 0);
+	const peakSum = surveyed.reduce((s, f) => s + f.properties.peak_occupancy, 0);
+	const capSum = surveyed.reduce((s, f) => s + f.properties.space, 0);
+	const peakPct = (f) => (f.properties.peak_occupancy / f.properties.space) * 100;
+	// 85% is the classic Shoup target: above it, drivers start cruising for a spot.
+	const over85 = surveyed.filter(f => peakPct(f) >= 85).length;
+	const overCap = surveyed.filter(f => peakPct(f) > 100).length;
 
 	const white = fs.filter(f => f.properties.regulation === 'white').reduce((s, f) => s + (f.properties.space || 0), 0);
 	const blue = fs.filter(f => f.properties.regulation === 'blue').reduce((s, f) => s + (f.properties.space || 0), 0);
@@ -207,10 +209,9 @@ function statsForArea(areaKey) {
 
 	return {
 		occupancy: [
-			{ value: round(mean(occ)), label: 'Mean Occupancy %', color: '#2ecc71' },
-			{ value: occ.filter(v => v > 100).length, label: 'Zones Over Capacity', color: '#ff1f44' },
-			{ value: occ.filter(v => v < 50).length, label: 'Zones Under 50% (slack)', color: '#cddc39' },
-			{ value: totObs ? round((offObs / totObs) * 100) : 0, label: 'Parked Off-Carriageway %', color: '#00e5ff' },
+			{ value: capSum ? round((peakSum / capSum) * 100) : 0, label: 'Peak Occupancy % (cap-weighted)', color: '#2ecc71' },
+			{ value: surveyed.length ? round((over85 / surveyed.length) * 100) : 0, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
+			{ value: overCap, label: 'Zones Over Capacity', color: '#ff1f44' },
 		],
 		paidfree: [
 			{ value: fs.length, label: 'Survey Paths', color: '#00e5ff' },
@@ -224,7 +225,214 @@ function statsForArea(areaKey) {
 			{ value: totalRetSpaces ? round((retainedSpaces / totalRetSpaces) * 100) : 0, label: '% Spaces Retained', color: '#4CAF50' },
 			{ value: retainedPaths, label: 'Retained Paths', color: '#00e5ff' },
 		],
+		displacement: computeDisplacement(fs.filter(f => f.properties.retained === 'removed')).stats,
 	};
+}
+
+// --- Displacement snapshot (the §6 "where do the removed cars go" check) ---
+// When BRT removes a corridor's on-street parking, the cars parked there at the
+// busy hour have to land somewhere. The honest test is: do the streets *around*
+// the corridor have room to absorb them?
+//
+// "Around the corridor" = the parking-lines inventory already tags every segment
+// with an `impact` of corridor / buffer / yard. By construction buffer + yard are
+// the band within ~100 m of the corridor, so we use those tags directly instead
+// of recomputing distances.
+//
+// We scope the absorbers to the corridor the removals actually sit on, by name.
+// Every parking-line name is prefixed with its corridor street (KomitasGriboedov003,
+// KomitasYard001…) and the removed survey zones share that prefix (Komitas008,
+// Komitas046…) — so the set of leading words on the removed zones IS the corridor
+// namespace. Matching buffer/yard names by that prefix keeps only the genuinely
+// nearby capacity instead of the whole study-area inventory. (No hardcoded street:
+// the prefix is derived from whatever zones are flagged removed — so a per-area call
+// with no removals simply yields an empty, zeroed block.)
+//
+// Those buffer/yard streets were never occupancy-surveyed, so we only know their
+// *total* capacity — the result is a best-case "is there even enough room in
+// principle" (gross capacity, not spare).
+//
+//   removed demand  = Σ peak_occupancy over the field-survey 'removed' zones
+//                     (real cars needing a new spot at the busy hour)
+//   removed supply  = Σ space over those same zones (marked spaces lost)
+//   absorbing room  = Σ space over buffer/yard parking-lines on the same corridor
+const PARKING_LINES_PATH = 'app/static/data/wgs84/parking-lines.geojson';
+const linesGeo = JSON.parse(readFileSync(PARKING_LINES_PATH, 'utf8'));
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const leadWord = (n) => (String(n || '').match(/^[A-Za-z]+/) || [''])[0];
+
+// True single-hour peak: the most cars standing in the removed zones at one clock-
+// hour (max over hours of Σ vehicles present), NOT the sum of each zone's own peak
+// hour — those peaks fall at different times, so summing them overstates what's ever
+// displaced at once (147 summed vs 93 real). Grouped by area so multiple corridors
+// each contribute their own local peak hour. Reads the hourly presence sets that
+// parseUnitedData already built (sources[area].hourPlates: zone → hour → Set(plates)).
+function peakHourDemand(removedZones) {
+	const byArea = {};
+	for (const f of removedZones) (byArea[f.properties.area] ??= []).push(f.properties.zone);
+	let total = 0;
+	for (const [area, zones] of Object.entries(byArea)) {
+		const src = sources[area];
+		if (!src) continue;
+		const hours = new Set();
+		for (const z of zones) { const zh = src.hourPlates.get(z); if (zh) for (const h of zh.keys()) hours.add(h); }
+		let areaMax = 0;
+		for (const h of hours) {
+			let sum = 0;
+			for (const z of zones) sum += src.hourPlates.get(z)?.get(h)?.size || 0;
+			if (sum > areaMax) areaMax = sum;
+		}
+		total += areaMax;
+	}
+	return total;
+}
+
+// --- "Is this absorber on a surveyed street, and near the area?" geometry (metres) ---
+// A buffer/yard parking-line that sits on a surveyed street is ALREADY represented by
+// the survey layers (green if retained, hidden if removed), so counting it again as
+// unsurveyed absorbing capacity would double-count the removed parking (the Zone 21 /
+// SebastiaVantyan001 case). We flag each buffer/yard line two ways:
+//   • distance to the nearest survey path — ≤ SURVEY_NEAR ⇒ surveyed (exclude);
+//   • distance to the affected area's overall survey FOOTPRINT (the bounding box of its
+//     survey paths) — within AREA_MAX ⇒ near enough to absorb that area's displacement.
+// Gating on the area footprint (not a single street) lets a lot sitting behind the
+// surveyed blocks still count, while keeping genuinely distant lots out.
+const SURVEY_NEAR = 20, AREA_MAX = 100;
+const LAT0 = 40.18, MX = Math.cos((LAT0 * Math.PI) / 180) * 111320, MY = 110540;
+const toXY = ([lng, lat]) => [lng * MX, lat * MY];
+function ptSeg(p, a, b) {
+	const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+	let t = L ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L : 0;
+	t = t < 0 ? 0 : t > 1 ? 1 : t;
+	return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+// Distance from point p to an axis-aligned bbox (0 if inside).
+function ptBox(p, b) {
+	const dx = Math.max(b.x0 - p[0], 0, p[0] - b.x1);
+	const dy = Math.max(b.y0 - p[1], 0, p[1] - b.y1);
+	return Math.hypot(dx, dy);
+}
+// Survey-path segments + bounding box grouped by area, in metres.
+const surveySegsByArea = {};
+const surveyBoxByArea = {};
+for (const f of geojson.features) {
+	const pts = f.geometry.coordinates.map(toXY);
+	const segs = (surveySegsByArea[f.properties.area] ??= []);
+	for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1], pts[i]]);
+	const b = (surveyBoxByArea[f.properties.area] ??= { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+	for (const [x, y] of pts) { b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y); }
+}
+// For each buffer/yard parking-line: min distance to every area's survey paths (global
+// min, for the surveyed-street exclusion) and to every area's survey footprint bbox.
+const bufferYard = linesGeo.features.filter(f => f.properties.impact === 'buffer' || f.properties.impact === 'yard');
+const absorberDist = new Map();
+for (const f of bufferYard) {
+	const cs = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates.flat();
+	const pts = cs.map(toXY);
+	const byArea = {}; const boxByArea = {}; let global = Infinity;
+	for (const [area, segs] of Object.entries(surveySegsByArea)) {
+		let m = Infinity;
+		for (const s of segs) for (const p of pts) { const d = ptSeg(p, s[0], s[1]); if (d < m) m = d; }
+		byArea[area] = m; if (m < global) global = m;
+		let mb = Infinity;
+		for (const p of pts) { const d = ptBox(p, surveyBoxByArea[area]); if (d < mb) mb = d; }
+		boxByArea[area] = mb;
+	}
+	absorberDist.set(f, { byArea, boxByArea, global });
+}
+const sumSpace = (arr) => arr.reduce((s, f) => s + num(f.properties.space), 0);
+
+// --- Off-street yard POLYGONS (parking-areas.geojson) as unsurveyed off-street absorbers ---
+// The off-street lots drawn in the regulation steps (KomitasYard*, RaffiYard*, …), 265 of
+// them, capacity in each feature's description ("Space: N"). The six that were occupancy-
+// surveyed (the field-survey-yards: KomitasCity etc.) are EXCLUDED — they carry their own
+// measured occupancy and are shown but not counted, like the green on-street survivors.
+// Each remaining lot is gated to an area by distance from its polygon to that area's survey
+// footprint bbox (≤ AREA_MAX), the same rule as the unsurveyed on-street absorbers.
+const AREAS_PATH = 'app/static/data/wgs84/parking-areas.geojson';
+const areasGeo = JSON.parse(readFileSync(AREAS_PATH, 'utf8'));
+const SURVEYED_YARDS = new Set(['KomitasCity', 'ShirazYard010', 'GNOFF', 'Palace', 'SebastiaYard006', 'NalbandyanYard001']);
+const areaSpace = (p) => { const s = (p.description && (p.description.value || p.description)) || ''; const m = String(s).match(/Space:?\s*(\d+)/i); return m ? +m[1] : 0; };
+const offYardPolys = [];
+for (const f of areasGeo.features) {
+	if (SURVEYED_YARDS.has(f.properties.name)) continue;        // surveyed → shown, not counted
+	const space = areaSpace(f.properties);
+	if (!space) continue;
+	const ring = f.geometry.type === 'Polygon' ? f.geometry.coordinates.flat() : f.geometry.coordinates.flat(2);
+	const pts = ring.map(toXY);
+	const boxByArea = {};
+	for (const [area, b] of Object.entries(surveyBoxByArea)) {
+		let mb = Infinity;
+		for (const p of pts) { const d = ptBox(p, b); if (d < mb) mb = d; }
+		boxByArea[area] = mb;
+	}
+	offYardPolys.push({ name: f.properties.name, space, boxByArea });
+}
+
+// Returns { stats, raw } for a set of removed survey zones. Absorbing capacity counts
+// ONLY parking we have NOT already surveyed — surveyed parking has its own measured
+// occupancy, so counting it as free room to absorb displaced cars would double-count.
+//   GREEN  surveyed survivors — retained survey zones; SHOWN on the map for context but
+//          EXCLUDED from the absorbing math (they already carry their own occupancy).
+//   YELLOW unsurveyed nearby  — buffer/yard parking-lines within AREA_MAX of the area's
+//          survey footprint AND not coincident with any surveyed street → counts.
+//   OFF-STREET — the affected area(s)' off-street yard lot(s) → counts.
+// Yellow + off-street are gross capacity (best-case); only these feed Nearby On-Street,
+// Nearby Off-Street and % Cars Absorbed.
+function computeDisplacement(removedZones) {
+	const removedSupply = sumSpace(removedZones);
+	const removedDemand = peakHourDemand(removedZones);
+	const removedAreas = [...new Set(removedZones.map(f => f.properties.area))];
+
+	const retainedSurveyed = geojson.features.filter(f => removedAreas.includes(f.properties.area) && f.properties.retained === 'retained');
+	const greenCapacity = sumSpace(retainedSurveyed);
+
+	const yellow = removedZones.length ? bufferYard.filter(f => {
+		const d = absorberDist.get(f);
+		if (d.global <= SURVEY_NEAR) return false;                 // on a surveyed street → already represented
+		return removedAreas.some(a => (d.boxByArea[a] ?? Infinity) <= AREA_MAX);
+	}) : [];
+	const yellowCapacity = sumSpace(yellow);
+
+	// Only the UNSURVEYED nearby parking counts toward absorbing capacity; the green
+	// retained survey zones AND the surveyed off-street yards are shown but excluded
+	// (they have their own occupancy).
+	const onStreetCapacity = yellowCapacity;
+	const offYards = removedZones.length
+		? offYardPolys.filter(y => removedAreas.some(a => (y.boxByArea[a] ?? Infinity) <= AREA_MAX))
+		: [];
+	const offStreetCapacity = offYards.reduce((s, y) => s + y.space, 0);
+	const surveyedYardCapacity = removedAreas.reduce((s, a) => s + num(yardByArea[a]?.space), 0); // shown, not counted
+	const absorbCapacity = onStreetCapacity + offStreetCapacity;
+	const netDemand = absorbCapacity - removedDemand;
+	// Two absorption rates: on-street alone, and the total nearby supply (on-street + yards).
+	const absorbedOnStreet = removedDemand ? round(Math.min(1, onStreetCapacity / removedDemand) * 100) : null;
+	const absorbed = removedDemand ? round(Math.min(1, absorbCapacity / removedDemand) * 100) : null;
+	const raw = {
+		removed_zones: removedZones.length,
+		removed_supply: removedSupply,
+		removed_demand: removedDemand,
+		absorb_capacity: absorbCapacity,        // counted = yellow on-street + off-street (green excluded)
+		absorb_onstreet: onStreetCapacity,      // unsurveyed nearby on-street only
+		absorb_green_surveyed: greenCapacity,   // retained survey zones — shown but NOT counted
+		absorb_yellow_unsurveyed: yellowCapacity, // unsurveyed buffer/yard nearby
+		absorb_offstreet: offStreetCapacity,    // unsurveyed off-street yard polygons (counted)
+		absorb_offstreet_surveyed: surveyedYardCapacity, // surveyed yards — shown, NOT counted
+		net_vs_demand: netDemand,
+		net_vs_supply: absorbCapacity - removedSupply,
+		absorbed_onstreet: absorbedOnStreet,
+		absorbed,
+		basis: 'gross capacity of UNSURVEYED parking only; green=retained survey zones shown but excluded (own occupancy); yellow=unsurveyed on-street buffer/yard >20m from any survey path & within 100m of the area survey footprint (bbox); purple=unsurveyed off-street yard polygons; surveyed yards shown but excluded',
+	};
+	const stats = [
+		{ value: removedDemand, label: 'Cars Displaced (Peak Hour)', color: '#EF5350' },
+		{ value: removedSupply, label: 'Spaces Removed', color: '#b0455a' },
+		{ value: onStreetCapacity, label: 'Nearby On-Street', color: '#ffd60a' },
+		{ value: offStreetCapacity, label: 'Nearby Off-Street', color: '#7c4dff' },
+		{ value: absorbedOnStreet == null ? 0 : absorbedOnStreet, label: '% Absorbed On-Street', color: '#ffd60a' },
+		{ value: absorbed == null ? 0 : absorbed, label: '% Absorbed Total', color: '#00e5ff' },
+	];
+	return { stats, raw };
 }
 
 const areaStats = {
@@ -237,6 +445,77 @@ const areaStats = {
 	shiraz: statsForArea('shiraz'),
 };
 geojson.areaStats = areaStats;
+geojson.displacement = computeDisplacement(geojson.features.filter(f => f.properties.retained === 'removed')).raw;
+
+// --- Demand profile (#3 stay-length split + #4 hourly accumulation curve) ---
+// Both read the per-zone presence structures parseUnitedData already built. The
+// hourly VAP is Σ vehicles present each clock-hour; the stay split bins each plate by
+// how many hours it was seen — <2h visitor, 2–8h commuter, >8h all-day storage
+// (consistent with avg_duration_h, which is total hours present per vehicle).
+// Per-area profiles ride in areaStats (the stats board reads them by viewport area);
+// per-zone profiles go in geojson.zoneProfiles, keyed "area:zone", for click popups.
+const STAY_BIN = (dur) => (dur < 2 ? 'visitor' : dur <= 8 ? 'commuter' : 'long');
+
+function durationTotals() { return { visitor: 0, commuter: 0, long: 0, durSum: 0, n: 0 }; }
+function addStay(t, dur) {
+	t.durSum += dur; t.n++;
+	const b = STAY_BIN(dur);
+	if (b === 'visitor') t.visitor++; else if (b === 'commuter') t.commuter++; else t.long++;
+}
+function durationBlock(t) {
+	const tot = t.visitor + t.commuter + t.long || 1;
+	return {
+		visitor: t.visitor, commuter: t.commuter, long: t.long,
+		visitorPct: round((t.visitor / tot) * 100),
+		commuterPct: round((t.commuter / tot) * 100),
+		longPct: round((t.long / tot) * 100),
+		avg: round(t.durSum / (t.n || 1), 1),
+	};
+}
+
+// One area's profile: VAP merged by hour across its zones (across all areas for
+// 'all'), duration counts summed. Uses each zone's own source for the hourly sets.
+function areaProfile(areaKey) {
+	const feats = areaKey === 'all' ? geojson.features : geojson.features.filter(f => f.properties.area === areaKey);
+	const byArea = {};
+	for (const f of feats) (byArea[f.properties.area] ??= []).push(f.properties.zone);
+	const vapMap = new Map();
+	const t = durationTotals();
+	for (const [area, zones] of Object.entries(byArea)) {
+		const src = sources[area];
+		if (!src) continue;
+		for (const z of zones) {
+			const hp = src.hourPlates.get(z);
+			if (hp) for (const [h, plates] of hp) vapMap.set(h, (vapMap.get(h) || 0) + plates.size);
+			const ph = src.plateHours.get(z);
+			if (ph) for (const hours of ph.values()) addStay(t, hours.size);
+		}
+	}
+	const vap = [...vapMap.entries()].sort((a, b) => a[0] - b[0]);  // [[hour, vehicles], …]
+	return { vap, duration: durationBlock(t) };
+}
+
+// One zone's profile, for the click popup.
+function zoneProfile(area, zone) {
+	const src = sources[area];
+	if (!src) return null;
+	const hp = src.hourPlates.get(zone), ph = src.plateHours.get(zone);
+	if (!hp && !ph) return null;
+	const vap = hp ? [...hp.entries()].sort((a, b) => a[0] - b[0]).map(([h, p]) => [h, p.size]) : [];
+	const t = durationTotals();
+	if (ph) for (const hours of ph.values()) addStay(t, hours.size);
+	const dur = durationBlock(t);
+	return { vap, stay: { visitor: dur.visitor, commuter: dur.commuter, long: dur.long }, avg: dur.avg };
+}
+
+for (const k of Object.keys(areaStats)) areaStats[k].profile = areaProfile(k);
+
+const zoneProfiles = {};
+for (const f of geojson.features) {
+	const p = zoneProfile(f.properties.area, f.properties.zone);
+	if (p) zoneProfiles[`${f.properties.area}:${f.properties.zone}`] = p;
+}
+geojson.zoneProfiles = zoneProfiles;
 
 writeFileSync(GEOJSON_PATH, JSON.stringify(geojson));
 writeFileSync(YARDS_PATH, JSON.stringify(yards));
@@ -246,10 +525,18 @@ console.log(`Survey paths: ${geojson.features.length}  matched to survey data: $
 if (missing.length) console.log(`No survey rows for zones: ${missing.join(', ')}`);
 for (const area of ['malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz', 'all']) {
 	const o = areaStats[area].occupancy;
-	console.log(`[${area}] mean occ ${o[0].value}%  over-cap ${o[1].value}  under-50 ${o[2].value}  off-carriageway ${o[3].value}%`);
+	console.log(`[${area}] peak occ ${o[0].value}%  over-85 ${o[1].value}%  over-cap ${o[2].value}`);
 }
 for (const y of yards.features) {
 	console.log(`Yard ${y.properties.name}: cap ${y.properties.space}  occupancy ${y.properties.occupancy_pct}%  (${y.properties.unique_vehicles} vehicles)`);
 }
 console.log(`Windows — komitas: ${sources.komitas.window}h, shiraz: ${sources.shiraz.window}h`);
+const d = geojson.displacement;
+console.log(`Displacement: ${d.removed_zones} removed zones lose ${d.removed_supply} spaces / ${d.removed_demand} cars at peak hour; ` +
+	`counted capacity ${d.absorb_capacity} (yellow on-street ${d.absorb_onstreet} + off-street ${d.absorb_offstreet}; green ${d.absorb_green_surveyed} shown but excluded) → ` +
+	`net vs demand ${d.net_vs_demand >= 0 ? '+' : ''}${d.net_vs_demand}, vs supply ${d.net_vs_supply >= 0 ? '+' : ''}${d.net_vs_supply} (${d.absorbed}% absorbed)`);
+const ap = areaStats.all.profile;
+console.log(`Profile [all]: VAP ${ap.vap.length} hours (peak ${Math.max(...ap.vap.map(p => p[1]))}); ` +
+	`stay split ${ap.duration.visitorPct}% visitor / ${ap.duration.commuterPct}% commuter / ${ap.duration.longPct}% long, avg ${ap.duration.avg}h; ` +
+	`zoneProfiles: ${Object.keys(zoneProfiles).length}`);
 console.log(`Written ${GEOJSON_PATH} and ${YARDS_PATH}`);

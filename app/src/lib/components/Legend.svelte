@@ -247,7 +247,7 @@
 <style>
 	.mode-toggle {
 		display: flex;
-		gap: 4px;
+		gap: 3px;
 		margin-bottom: 14px;
 		padding: 3px;
 		background: rgba(255, 255, 255, 0.06);
@@ -256,18 +256,19 @@
 
 	.mode-btn {
 		flex: 1;
-		padding: 6px 8px;
+		padding: 6px 6px;
 		background: none;
 		border: none;
 		border-radius: 6px;
-		color: rgba(255, 255, 255, 0.55);
+		color: rgba(255, 255, 255, 0.8);
 		font-family: 'Inter', sans-serif;
-		font-size: 0.72rem;
+		font-size: 0.7rem;
 		font-weight: 500;
 		line-height: 1.2;
 		cursor: pointer;
 		transition: background 0.15s, color 0.15s;
-		white-space: nowrap;
+		white-space: normal;
+		overflow-wrap: break-word;
 	}
 
 	.mode-btn:hover {
@@ -430,7 +431,7 @@
 		backdrop-filter: blur(16px);
 		padding: 14px 16px;
 		/* Fixed width so switching lenses / toggling filters never resizes the panel. */
-		width: 232px;
+		width: 248px;
 		box-sizing: border-box;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}

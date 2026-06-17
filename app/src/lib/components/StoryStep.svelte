@@ -10,7 +10,7 @@
 
 	let statEls = $state([]);
 
-	const AREA_LABELS = { all: 'All areas', malatia: 'Malatia-Sebastia', kentron: 'Kentron', garegin: 'Garegin Nzhdeh', mega: 'Mega Mall', komitas: 'Komitas', shiraz: 'Shiraz & Hasratyan' };
+	const AREA_LABELS = { all: 'All areas', malatia: 'Malatia-Sebastia', kentron: 'Kentron', garegin: 'Garegin Nzhdeh', mega: 'Gai Avenue', komitas: 'Komitas', shiraz: 'Shiraz & Hasratyan' };
 	// On the Field Surveys step the dashboard names the area the reader has zoomed into.
 	let areaLabel = $derived(step.showFieldSurveys ? (AREA_LABELS[$fieldSurveyArea] ?? null) : null);
 
@@ -29,6 +29,16 @@
 		return areaBlock ?? activeFieldMode.stats;
 	});
 	let resolvedDescription = $derived(activeFieldMode ? activeFieldMode.description : step.description);
+
+	// Always-on demand profile for the Field Surveys step: the hourly accumulation
+	// curve (#4) and the stay-length split (#3) for whichever area the viewport is on.
+	// Lives in the stats board (not the legend) so it stays visible across every lens.
+	let profile = $derived(step.showFieldSurveys ? ($fieldSurveyStats?.[$fieldSurveyArea]?.profile ?? null) : null);
+	let vapMax = $derived(profile?.vap?.length ? Math.max(...profile.vap.map(p => p[1])) : 0);
+	let vapPeakHour = $derived.by(() => {
+		if (!profile?.vap?.length) return null;
+		return profile.vap.reduce((best, p) => (p[1] > best[1] ? p : best))[0];
+	});
 
 	let dynamicStats = $derived.by(() => {
 		// Only run dynamic calculation on steps that have legendGroups configured with an Impact Area toggle
@@ -133,7 +143,19 @@
 	});
 
 	let isVisible = $state(false);
-	let animatedValues = tweened((resolvedStats || (step.legendGroups ? step.legendGroups[0].layers : [])).map(() => 0), { duration: 1500, easing: cubicOut });
+	// Custom interpolator: the stat blocks differ in length between lenses (e.g. the
+	// occupancy lens has 3 cells, paid-free/displacement/retained have 4). Svelte's
+	// default array interpolator throws "Cannot interpolate values of different type"
+	// when the count changes — which would abort the whole reactive update. So when the
+	// lengths differ we snap straight to the new values; otherwise animate per cell.
+	const interpolateStats = (a, b) => {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return () => b;
+		return (t) => b.map((bv, i) => a[i] + (bv - a[i]) * t);
+	};
+	let animatedValues = tweened(
+		(resolvedStats || (step.legendGroups ? step.legendGroups[0].layers : [])).map(() => 0),
+		{ duration: 1500, easing: cubicOut, interpolate: interpolateStats }
+	);
 
 	$effect(() => {
 		if (isVisible && dynamicStats.length > 0) {
@@ -196,6 +218,46 @@
 							<span class="stat-label">{stat.label}</span>
 						</div>
 					{/each}
+				</div>
+			{/if}
+
+			{#if profile}
+				<div class="profile">
+					<div class="profile-head">
+						<span class="profile-title">Hourly occupancy</span>
+						{#if vapPeakHour != null}<span class="profile-sub">peaks {vapPeakHour}:00 · {vapMax.toLocaleString()} cars</span>{/if}
+					</div>
+					<div class="vap-chart">
+						{#each profile.vap as point}
+							<div
+								class="vap-bar"
+								class:peak={point[0] === vapPeakHour}
+								style="height: {vapMax ? Math.max(3, (point[1] / vapMax) * 100) : 3}%"
+								title="{point[0]}:00 — {point[1]} vehicles"
+							></div>
+						{/each}
+					</div>
+					{#if profile.vap.length}
+						<div class="vap-axis">
+							<span>{profile.vap[0][0]}:00</span>
+							<span>{profile.vap[profile.vap.length - 1][0]}:00</span>
+						</div>
+					{/if}
+
+					<div class="profile-head profile-head--stay">
+						<span class="profile-title">Stay length</span>
+						<span class="profile-sub">avg {profile.duration.avg}h</span>
+					</div>
+					<div class="stay-bar">
+						<div class="stay-seg stay-visitor" style="width: {profile.duration.visitorPct}%"></div>
+						<div class="stay-seg stay-commuter" style="width: {profile.duration.commuterPct}%"></div>
+						<div class="stay-seg stay-long" style="width: {profile.duration.longPct}%"></div>
+					</div>
+					<div class="stay-legend">
+						<span><i class="stay-visitor"></i>Visitor &lt;2h · {profile.duration.visitorPct}%</span>
+						<span><i class="stay-commuter"></i>Commuter 2–8h · {profile.duration.commuterPct}%</span>
+						<span><i class="stay-long"></i>Long 8h+ · {profile.duration.longPct}%</span>
+					</div>
 				</div>
 			{/if}
 
@@ -387,6 +449,106 @@
 		letter-spacing: 0.3px;
 		text-align: center;
 	}
+
+	/* Always-on demand profile (hourly curve + stay-length split) */
+	.profile {
+		margin-bottom: 18px;
+		padding: 12px 14px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 10px;
+	}
+
+	.profile-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 8px;
+	}
+
+	.profile-head--stay {
+		margin-top: 16px;
+	}
+
+	.profile-title {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.6px;
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.profile-sub {
+		font-size: 0.72rem;
+		font-variant-numeric: tabular-nums;
+		color: rgba(255, 255, 255, 0.45);
+	}
+
+	.vap-chart {
+		display: flex;
+		align-items: flex-end;
+		gap: 2px;
+		height: 46px;
+	}
+
+	.vap-bar {
+		flex: 1;
+		min-height: 3px;
+		border-radius: 2px 2px 0 0;
+		background: rgba(0, 206, 209, 0.5);
+		transition: background 0.15s;
+	}
+
+	.vap-bar.peak {
+		background: #00e5ff;
+		box-shadow: 0 0 6px rgba(0, 229, 255, 0.7);
+	}
+
+	.vap-axis {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 4px;
+		font-size: 0.62rem;
+		font-variant-numeric: tabular-nums;
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	.stay-bar {
+		display: flex;
+		height: 10px;
+		border-radius: 5px;
+		overflow: hidden;
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.stay-seg.stay-visitor { background: #00e5ff; }
+	.stay-seg.stay-commuter { background: #ffd60a; }
+	.stay-seg.stay-long { background: #ff6b6b; }
+
+	.stay-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+		margin-top: 8px;
+		font-size: 0.66rem;
+		color: rgba(255, 255, 255, 0.6);
+	}
+
+	.stay-legend span {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+	}
+
+	.stay-legend i {
+		width: 8px;
+		height: 8px;
+		border-radius: 2px;
+		display: inline-block;
+	}
+
+	.stay-legend i.stay-visitor { background: #00e5ff; }
+	.stay-legend i.stay-commuter { background: #ffd60a; }
+	.stay-legend i.stay-long { background: #ff6b6b; }
 
 	.comparison-block {
 		margin-bottom: 14px;

@@ -24,6 +24,11 @@
 	let map = null;
 	let topMarkers = [];
 	let currentStepIdx = 0;
+	// The Displacement-lens absorber filter — matches the unsurveyed nearby parking-lines
+	// tagged with `_absorber` at load (buffer/yard, >20 m from any survey path, within
+	// 150 m of the area). Set once, reused to make those yellow lines clickable via the
+	// shared parking-lines hit layer.
+	let dispAbsorberFilter = null;
 
 	function updateFieldSurveyArea() {
 		const s = STORY_STEPS[currentStepIdx];
@@ -111,10 +116,26 @@
 		// surviving network keeps whichever lens colouring is active.
 		const fsOcc = showFS && colorMode === 'field-occupancy';
 		const fsReg = showFS && colorMode === 'field-surveys';
+		// Displacement lens: the surviving survey network (green) with the absorbing
+		// buffer/yard streets (yellow) on top. The removed-corridor red lines are
+		// intentionally not shown in this view.
+		const fsDisp = showFS && colorMode === 'field-displacement';
 		map.setLayoutProperty('field-surveys-lines', 'visibility', fsReg ? 'visible' : 'none');
 		map.setLayoutProperty('field-surveys-occupancy-glow', 'visibility', fsOcc ? 'visible' : 'none');
 		map.setLayoutProperty('field-surveys-occupancy', 'visibility', fsOcc ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-displacement-retained', 'visibility', fsDisp ? 'visible' : 'none');
+		map.setLayoutProperty('displacement-absorbers', 'visibility', fsDisp ? 'visible' : 'none');
+		// Unsurveyed off-street yard polygons (the counted "Nearby Off-Street" capacity), yellow.
+		map.setLayoutProperty('displacement-off-yards-fill', 'visibility', fsDisp ? 'visible' : 'none');
+		map.setLayoutProperty('displacement-off-yards-outline', 'visibility', fsDisp ? 'visible' : 'none');
+		map.setLayoutProperty('field-surveys-displacement-removed', 'visibility', 'none');
 		map.setLayoutProperty('field-surveys-hit', 'visibility', showFS ? 'visible' : 'none');
+		// The yellow absorber lines come from the parking-lines source, so they need the
+		// shared parking-lines hit layer to be clickable. Surface it in the Displacement
+		// lens scoped to the same absorbers; elsewhere leave it to the showLines logic
+		// above with no extra filter.
+		map.setFilter('parking-lines-hit', fsDisp ? dispAbsorberFilter : null);
+		if (fsDisp) map.setLayoutProperty('parking-lines-hit', 'visibility', 'visible');
 		// Retained/removed filter: when on, keep only the paths retained after the redesign.
 		const retainedOnly = (showFS && $fieldSurveyRetained) ? ['==', ['get', 'retained'], 'retained'] : null;
 		map.setFilter('field-surveys-occupancy-glow', retainedOnly);
@@ -127,15 +148,17 @@
 		map.setLayoutProperty('field-survey-yard-fill', 'visibility', showFS ? 'visible' : 'none');
 		map.setLayoutProperty('field-survey-yard-outline', 'visibility', showFS ? 'visible' : 'none');
 		// In the occupancy lens, color the yard by its average occupancy on the same ramp
-		// as the survey paths; in paid/free keep its off-street purple.
+		// as the survey paths; otherwise keep its off-street purple — including the
+		// Displacement lens, where the yard is the absorbing off-street capacity and
+		// reads as purple against the green retained network and yellow on-street absorbers.
 		map.setPaintProperty('field-survey-yard-fill', 'fill-color', fsOcc ? OCCUPANCY_COLOR : '#7c4dff');
-		map.setPaintProperty('field-survey-yard-fill', 'fill-opacity', fsOcc ? 0.55 : 0.35);
-		// Keep the off-street purple (#7c4dff, same as other indexes) on the border in
-		// the occupancy lens — dashed there so the shaded yard still reads as an
-		// off-street facility (not an on-street path); solid purple otherwise.
+		map.setPaintProperty('field-survey-yard-fill', 'fill-opacity', (fsOcc || fsDisp) ? 0.55 : 0.35);
+		// Keep the off-street purple (#7c4dff, same as other indexes) on the border —
+		// dashed in the occupancy and Displacement lenses so the shaded yard still reads
+		// as an off-street facility (not an on-street path); solid purple otherwise.
 		map.setPaintProperty('field-survey-yard-outline', 'line-color', '#7c4dff');
-		map.setPaintProperty('field-survey-yard-outline', 'line-width', fsOcc ? 3 : 2);
-		map.setPaintProperty('field-survey-yard-outline', 'line-dasharray', fsOcc ? [2, 1.5] : [1]);
+		map.setPaintProperty('field-survey-yard-outline', 'line-width', (fsOcc || fsDisp) ? 3 : 2);
+		map.setPaintProperty('field-survey-yard-outline', 'line-dasharray', (fsOcc || fsDisp) ? [2, 1.5] : [1]);
 
 		// Camera — only fly when entering the step. Re-applying visibility for a lens
 		// toggle (paid/free, retained/removed) must NOT move the camera, so a reader who
@@ -405,6 +428,9 @@
 
 			// Per-area dashboard numbers travel inside the field-surveys file.
 			fieldSurveyStats.set(fieldSurveysData.areaStats ?? null);
+			// Per-zone demand profiles (hourly curve + stay split), keyed "area:zone",
+			// for the click popups. Captured here so the popup builder can read them.
+			const zoneProfiles = fieldSurveysData.zoneProfiles ?? {};
 
 			// Parse "Space: N" from each area's HTML description into a numeric `space`
 			// property (so popups and labels can read it directly), then flag the top N
@@ -464,6 +490,62 @@
 				topMarkers.push(marker);
 			}
 
+			// Tag each parking-line as a Displacement "unsurveyed nearby absorber" (yellow):
+			// buffer/yard impact, >20 m from every survey path (so not already shown by the
+			// survey layers), and within 100 m of some area's survey FOOTPRINT (the bbox of
+			// that area's survey paths) — so a lot behind the surveyed blocks still counts,
+			// while genuinely distant lots stay out. Mirrors the same test in
+			// compute_field_survey_metrics.mjs so the map and the dashboard numbers agree.
+			{
+				const SURVEY_NEAR = 20, AREA_MAX = 100;
+				const LAT0 = 40.18, MX = Math.cos((LAT0 * Math.PI) / 180) * 111320, MY = 110540;
+				const toXY = ([lng, lat]) => [lng * MX, lat * MY];
+				const ptSeg = (p, a, b) => {
+					const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+					let t = L ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L : 0;
+					t = t < 0 ? 0 : t > 1 ? 1 : t;
+					return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+				};
+				const ptBox = (p, b) => {
+					const dx = Math.max(b.x0 - p[0], 0, p[0] - b.x1);
+					const dy = Math.max(b.y0 - p[1], 0, p[1] - b.y1);
+					return Math.hypot(dx, dy);
+				};
+				const segs = [];
+				const boxes = {};
+				for (const f of fieldSurveysData.features) {
+					const pts = f.geometry.coordinates.map(toXY);
+					for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1], pts[i]]);
+					const b = (boxes[f.properties.area] ??= { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+					for (const [x, y] of pts) { b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y); }
+				}
+				const boxList = Object.values(boxes);
+				for (const f of linesData.features) {
+					const imp = f.properties.impact;
+					if (imp !== 'buffer' && imp !== 'yard') { f.properties._absorber = false; continue; }
+					const cs = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates.flat();
+					const pts = cs.map(toXY);
+					let mPath = Infinity, mBox = Infinity;
+					for (const p of pts) {
+						for (const s of segs) { const d = ptSeg(p, s[0], s[1]); if (d < mPath) mPath = d; }
+						for (const b of boxList) { const d = ptBox(p, b); if (d < mBox) mBox = d; }
+					}
+					f.properties._absorber = mPath > SURVEY_NEAR && mBox <= AREA_MAX;
+				}
+				// Tag off-street yard POLYGONS (parking-areas) the same way: an unsurveyed lot
+				// within AREA_MAX of some area footprint is a counted off-street absorber
+				// (yellow). The six surveyed yards are excluded (shown green for context).
+				const SURVEYED_YARDS = new Set(['KomitasCity', 'ShirazYard010', 'GNOFF', 'Palace', 'SebastiaYard006', 'NalbandyanYard001']);
+				const areaSpace = (p) => { const s = (p.description && (p.description.value || p.description)) || ''; const m = String(s).match(/Space:?\s*(\d+)/i); return m ? +m[1] : 0; };
+				for (const f of areasData.features) {
+					if (SURVEYED_YARDS.has(f.properties.name) || !areaSpace(f.properties)) { f.properties._absorber = false; continue; }
+					const ring = f.geometry.type === 'Polygon' ? f.geometry.coordinates.flat() : f.geometry.coordinates.flat(2);
+					let mBox = Infinity;
+					for (const c of ring) { const p = toXY(c); for (const b of boxList) { const d = ptBox(p, b); if (d < mBox) mBox = d; } }
+					f.properties._absorber = mBox <= AREA_MAX;
+				}
+			}
+
 			map.addSource('parking-lines', { type: 'geojson', data: linesData, generateId: true });
 			map.addSource('parking-areas', { type: 'geojson', data: areasData, generateId: true });
 			map.addSource('corridors', { type: 'geojson', data: corridorsData });
@@ -478,7 +560,13 @@
 			for (const layer of ALL_LAYERS) {
 				map.addLayer(layer);
 			}
-			
+
+			// Yellow absorbers = the unsurveyed nearby parking-lines tagged above. Reused as
+			// the parking-lines-hit filter so only those yellow lines are clickable in the
+			// Displacement lens.
+			dispAbsorberFilter = ['==', ['get', '_absorber'], true];
+			map.setFilter('displacement-absorbers', dispAbsorberFilter);
+
 			geojsonData.set({
 				lines: linesData.features,
 				areas: areasData.features
@@ -486,6 +574,36 @@
 
 			// Shared popup builder for parking features
 			function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+			// Mini hourly-curve + stay-length viz for a zone's click popup (built as inline
+			// HTML so it lives inside the maplibre popup). Mirrors the always-on stats-board
+			// profile but for the single clicked zone.
+			function miniProfile(prof) {
+				if (!prof) return '';
+				let html = '';
+				if (prof.vap?.length) {
+					const max = Math.max(...prof.vap.map((x) => x[1])) || 1;
+					const peakH = prof.vap.reduce((b, x) => (x[1] > b[1] ? x : b))[0];
+					const bars = prof.vap.map(([h, v]) =>
+						`<div title="${h}:00 — ${v} vehicles" style="flex:1;min-height:2px;height:${Math.max(2, (v / max) * 34)}px;background:${h === peakH ? '#00e5ff' : 'rgba(0,206,209,0.5)'};border-radius:2px 2px 0 0"></div>`
+					).join('');
+					const first = prof.vap[0][0], last = prof.vap[prof.vap.length - 1][0];
+					html += `<div style="margin-top:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;opacity:0.55">Hourly occupancy · peaks ${peakH}:00</div>
+						<div style="display:flex;align-items:flex-end;gap:1px;height:36px;margin-top:4px">${bars}</div>
+						<div style="display:flex;justify-content:space-between;font-size:9px;opacity:0.45;margin-top:2px"><span>${first}:00</span><span>${last}:00</span></div>`;
+				}
+				if (prof.stay) {
+					const { visitor = 0, commuter = 0, long = 0 } = prof.stay;
+					const tot = visitor + commuter + long || 1;
+					const vp = Math.round((visitor / tot) * 100), cp = Math.round((commuter / tot) * 100), lp = 100 - vp - cp;
+					html += `<div style="margin-top:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;opacity:0.55">Stay length · avg ${prof.avg}h</div>
+						<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:4px;background:rgba(255,255,255,0.08)">
+							<div style="width:${vp}%;background:#00e5ff"></div><div style="width:${cp}%;background:#ffd60a"></div><div style="width:${lp}%;background:#ff6b6b"></div>
+						</div>
+						<div style="font-size:9px;opacity:0.6;margin-top:4px">Visitor &lt;2h ${vp}% · Commuter 2–8h ${cp}% · Long 8h+ ${lp}%</div>`;
+				}
+				return html;
+			}
+
 			function showParkingPopup(e, color, showSurveyMetrics = false) {
 				if (!e.features?.length) return;
 				const p = e.features[0].properties;
@@ -506,6 +624,10 @@
 				}
 				if (showSurveyMetrics && p.turnover != null && p.turnover !== '') rows.push(`<div>Turnover: ${p.turnover} vehicles/space</div>`);
 				if (showSurveyMetrics && p.avg_duration_h != null && p.avg_duration_h !== '') rows.push(`<div>Avg stay: ${p.avg_duration_h} h</div>`);
+				// Per-zone hourly curve + stay split (on-street survey paths only).
+				if (showSurveyMetrics && p.area != null && p.zone != null) {
+					rows.push(miniProfile(zoneProfiles[`${p.area}:${p.zone}`]));
+				}
 				if (p.administration) rows.push(`<div>Administration: ${cap(p.administration)}</div>`);
 				if (p.impact) rows.push(`<div>Impact: ${cap(p.impact)}</div>`);
 				const el = document.createElement('div');

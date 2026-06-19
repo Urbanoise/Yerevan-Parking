@@ -17,7 +17,7 @@ import xlsx from 'xlsx';
 //                         off-street log labelled "P" (Palace lot) → Palace yard
 //   • Komitas          — Parking Survey Sheet v5  (zones 70–122, 7:00–23:00)
 //                         off-street log labelled "Off street city" → KomitasCity yard
-//   • Shiraz/Hasratyan — Shiraz, Hasratyan - Analysis (zones 123–156, 7:00–24:00)
+//   • Shiraz/Hasratyan — Shiraz, Hasratyan - Analysis (zones 123–156, 7:00–23:00)
 //                         off-street log labelled "Shiraz off-street" → ShirazYard010
 
 const GEOJSON_PATH = 'app/static/data/wgs84/field-surveys.geojson';

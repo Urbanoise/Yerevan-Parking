@@ -1158,7 +1158,7 @@ body(
 
 heading("3. Refine “Available Absorptive Capacity”", 2)
 body(
-    "Output 8 presents absorptive capacity as a single large pool (7,479 off-street + 1,857 "
+    "Output 8 presents absorptive capacity as a single large pool (7,035 off-street + 1,857 "
     "cross-street on-street) comfortably exceeding removal. The field survey confirms overall "
     "sufficiency but shows two things the current text omits: absorption is off-street-dominated — "
     f"surviving and nearby on-street covers only ~{D['absorbed_onstreet']}% of peak displaced "
@@ -1179,7 +1179,7 @@ body(
 )
 
 heading("Deliberately leave unchanged", 2)
-bullet(" 16,341 / 8,862 / 5,953 — different scope from the field survey; the field figures do not "
+bullet(" 15,897 / 8,862 / 5,953 — different scope from the field survey; the field figures do not "
        "supersede them.", bold_lead="Supply-inventory totals: ")
 bullet(" the field survey under-records paid (red/blue) lines; Output 8's Zone A/B figures remain "
        "the reference for regulation.", bold_lead="Regulation classification: ")

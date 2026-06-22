@@ -266,7 +266,7 @@ body([("Scope boundary to hold throughout. ", {"bold": True}),
        "observations, 11,394 stays) — not the full 8,862-space inventory. Its displacement figures "
        "(908 displaced vs 1,643 removed = 55%) are for the surveyed areas and are presented as a locally-"
        "measured calibration of “displaced < removed,” not a corridor-wide total. The full-corridor "
-       "supply inventory (16,341 spaces; 5,953 removed) stays as the structural backbone.", {})],
+       "supply inventory (15,897 spaces; 5,953 removed) stays as the structural backbone.", {})],
      size=10, color=GREY)
 
 # ===========================================================================
@@ -357,7 +357,7 @@ change("Parking Impacts — Scale of Removal; Impact by Sensitivity Zone", "¶15
 change("Displacement Assessment — Understanding / Absorptive Capacity", "¶165–175",
        ["INJECT", "ADD"],
        "Displacement explained via European precedent (displaced < removed); absorptive capacity = "
-       "7,479 off-street + 1,857 on-street, framed as gross availability.",
+       "7,035 off-street + 1,857 on-street, framed as gross availability.",
        [("Add the locally-measured result: across the surveyed areas, peak displaced demand was 908 vs "
          "1,643 removed = 55% — the European principle now measured in Yerevan, not borrowed. Add the "
          "absorption breakdown (on-street covers only 43%, and 92% of the off-street capacity that closes "
@@ -391,7 +391,7 @@ change("NEW sub-section — Field parameters: what every collected variable show
 
 change("Conclusions", "¶185–191",
        ["INJECT", "REFRAME"],
-       "Five supply-only conclusions (16,341 spaces; 8,862 on-street; 11.3% paid; 5,953 removed; "
+       "Five supply-only conclusions (15,897 spaces; 8,862 on-street; 11.3% paid; 5,953 removed; "
        "absorptive capacity).",
        [("Keep the supply conclusions; add measured conclusions: peak occupancy 93% with 69% of zones "
          "over 85%; short-stay/high-turnover kerb; displaced demand 55% of removal; absorption ~100% but "
@@ -451,7 +451,7 @@ table(["Parameter", "Value (≈24,950 obs)"],
 
 heading("Full-corridor backbone (unchanged, keep)", 2)
 table(["Item", "Value"],
-      [["Inventory", "16,341 spaces / 994 features · 8,862 on-street / 728 segments · 7,479 off-street / 266 facilities"],
+      [["Inventory", "15,897 spaces / 994 features · 8,862 on-street / 728 segments · 7,035 off-street / 266 facilities"],
        ["Regulation", "11.3% paid (396 Zone A + 633 Zone B) · 87.9% free/unregulated"],
        ["Removal", "5,953 on-street removed (C1 1,836 · C2 3,310 · C3 807)"]],
       widths=[2.2, 5.0])

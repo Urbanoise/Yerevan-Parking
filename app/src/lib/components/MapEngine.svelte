@@ -592,14 +592,15 @@
 						<div style="display:flex;justify-content:space-between;font-size:9px;opacity:0.45;margin-top:2px"><span>${first}:00</span><span>${last}:00</span></div>`;
 				}
 				if (prof.stay) {
-					const { visitor = 0, commuter = 0, long = 0 } = prof.stay;
-					const tot = visitor + commuter + long || 1;
-					const vp = Math.round((visitor / tot) * 100), cp = Math.round((commuter / tot) * 100), lp = 100 - vp - cp;
+					const { short = 0, errand = 0, worker = 0, allday = 0 } = prof.stay;
+					const tot = short + errand + worker + allday || 1;
+					const sp = Math.round((short / tot) * 100), ep = Math.round((errand / tot) * 100),
+						wp = Math.round((worker / tot) * 100), ap = 100 - sp - ep - wp;
 					html += `<div style="margin-top:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;opacity:0.55">Stay length · avg ${prof.avg}h</div>
 						<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:4px;background:rgba(255,255,255,0.08)">
-							<div style="width:${vp}%;background:#00e5ff"></div><div style="width:${cp}%;background:#ffd60a"></div><div style="width:${lp}%;background:#ff6b6b"></div>
+							<div style="width:${sp}%;background:#00e5ff"></div><div style="width:${ep}%;background:#ffd60a"></div><div style="width:${wp}%;background:#ff9f1c"></div><div style="width:${ap}%;background:#ff6b6b"></div>
 						</div>
-						<div style="font-size:9px;opacity:0.6;margin-top:4px">Visitor &lt;2h ${vp}% · Commuter 2–8h ${cp}% · Long 8h+ ${lp}%</div>`;
+						<div style="font-size:9px;opacity:0.6;margin-top:4px">≤1h ${sp}% · 2–4h ${ep}% · 5–8h ${wp}% · &gt;8h ${ap}%</div>`;
 				}
 				return html;
 			}

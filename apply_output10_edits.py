@@ -11,7 +11,8 @@ as revised after client review:
   - truck-pocket %  -> show the calculation basis (comment 1)
   - Tbilisi          -> cautionary case, not a model (comment 2)
   - flat annual permit -> flagged IDEA pending PCS data, not a committed measure (comment 3)
-  - Gai Avenue       -> plain wording + site-specific carve-out, not a new zone class (comment 0)
+  - Gai Avenue       -> plain wording: kerb parking stays for now, revisit as the area changes
+                        (mall parking / BRT); not a new zone class (comment 0)
 """
 import copy
 import shutil
@@ -202,12 +203,10 @@ ins_after("Lower-sensitivity zones include the outer sections of both corridors"
     "— only about 14% of its displaced demand can be re-absorbed on nearby streets. Komitas, "
     "previously medium, behaves as high-sensitivity (123% peak, 0% on-street absorption) and is "
     "reclassified accordingly. Shiraz/Hasratyan and Malatia-Sebastia behave as genuinely "
-    "lower-sensitivity (75% and 54% peak). Gai Avenue (Mega Mall) is a special case: it is the one "
-    "surveyed area where, even counting every nearby off-street yard at full capacity, there is "
-    "still not enough room to re-absorb the cars displaced by kerb removal (123% peak, best-case "
-    "absorption below 100%). It therefore does not fit any of the three standard packages; the "
-    "simplest handling is a site-specific carve-out — defer kerb removal here and lean on the Mega "
-    "Mall's own off-street structure — rather than creating a new zone category. Across the surveyed "
+    "lower-sensitivity (75% and 54% peak). Gai Avenue (Mega Mall) is the one exception: even filling "
+    "every nearby off-street yard to capacity, there is still nowhere for the displaced cars to go "
+    "(123% peak). So the kerb parking simply stays for now, and gets a fresh look later as the area "
+    "changes — the mall's own parking, or the planned BRT line. Across the surveyed "
     "areas, peak displaced demand was 908 vehicles against 1,643 spaces removed (55%), confirming "
     "with local measurement that displaced demand falls well below the supply removed.")
 
@@ -282,18 +281,15 @@ ins_after("It is important to acknowledge that not all displaced parking",
     "Survey-specific caveats. The field survey observed a daytime window (07:00–24:00) and so "
     "under-counts true overnight-residential demand; it covered six representative areas rather than "
     "the full corridor; and the absorption figures are gross best-case (yards counted as if already "
-    "open). One residual risk is specific: Gai Avenue (Mega Mall) is the single surveyed area where "
-    "even best-case capacity cannot fully absorb the displaced demand, and is handled as a "
-    "site-specific carve-out (defer kerb removal pending the mall's off-street parking) rather than "
-    "through the standard zone packages.")
+    "open). One residual risk is specific: Gai Avenue (Mega Mall) is the one area even best-case "
+    "capacity can't cover, so its kerb parking is left in place for now.")
 
 # ============================================================ 11. RECOMMENDATIONS — packages by sensitivity zone
 ins_after("This zoning approach is important because it turns the mitigation strategy",
     "Measured recalibration of the packages. Komitas moves into the high-sensitivity zone (123% "
     "peak, 0% on-street absorption). Open Residential Yards moves up into the high-sensitivity "
-    "package as a committed precondition. Gai Avenue (Mega Mall) is handled as a site-specific "
-    "carve-out — defer kerb removal pending the mall's off-street parking — rather than as a new "
-    "zone class. The candidate idea to phase out the flat annual permit is noted against the "
+    "package as a committed precondition. Gai Avenue stays as-is for now rather than becoming its "
+    "own zone class. The candidate idea to phase out the flat annual permit is noted against the "
     "cross-cutting package as a flagged option, pending Parking City Service data. Figure 10 "
     "(measures by zone) and the sensitivity map are updated to match.")
 
@@ -306,7 +302,8 @@ ins_after("Enforcement and modal shift underpin demand reduction",
     "(908 against 1,643). Aggregate re-absorption approaching 100% is achievable but conditional on "
     "opening the gated residential yards, which carry about 92% of the absorptive capacity. The "
     "measured behaviour recalibrates the zoning — Komitas behaves as high-sensitivity (reclassify "
-    "from medium) and Gai Avenue is handled as a site-specific carve-out — and reduces, but does not "
+    "from medium) and Gai Avenue's kerb parking is left for now, to revisit as the area develops — "
+    "and reduces, but does not "
     "eliminate, the items requiring further study (overnight-residential demand, full-corridor "
     "extension, freight counts, and ANPR payment-compliance remain genuine gaps).")
 

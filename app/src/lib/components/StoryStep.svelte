@@ -249,14 +249,16 @@
 						<span class="profile-sub">avg {profile.duration.avg}h</span>
 					</div>
 					<div class="stay-bar">
-						<div class="stay-seg stay-visitor" style="width: {profile.duration.visitorPct}%"></div>
-						<div class="stay-seg stay-commuter" style="width: {profile.duration.commuterPct}%"></div>
-						<div class="stay-seg stay-long" style="width: {profile.duration.longPct}%"></div>
+						<div class="stay-seg stay-short" style="width: {profile.duration.shortPct}%"></div>
+						<div class="stay-seg stay-errand" style="width: {profile.duration.errandPct}%"></div>
+						<div class="stay-seg stay-worker" style="width: {profile.duration.workerPct}%"></div>
+						<div class="stay-seg stay-allday" style="width: {profile.duration.alldayPct}%"></div>
 					</div>
 					<div class="stay-legend">
-						<span><i class="stay-visitor"></i>Visitor &lt;2h · {profile.duration.visitorPct}%</span>
-						<span><i class="stay-commuter"></i>Commuter 2–8h · {profile.duration.commuterPct}%</span>
-						<span><i class="stay-long"></i>Long 8h+ · {profile.duration.longPct}%</span>
+						<span><i class="stay-short"></i>≤1h short visit · {profile.duration.shortPct}%</span>
+						<span><i class="stay-errand"></i>2–4h errand · {profile.duration.errandPct}%</span>
+						<span><i class="stay-worker"></i>5–8h worker · {profile.duration.workerPct}%</span>
+						<span><i class="stay-allday"></i>&gt;8h all-day · {profile.duration.alldayPct}%</span>
 					</div>
 				</div>
 			{/if}
@@ -520,9 +522,10 @@
 		background: rgba(255, 255, 255, 0.08);
 	}
 
-	.stay-seg.stay-visitor { background: #00e5ff; }
-	.stay-seg.stay-commuter { background: #ffd60a; }
-	.stay-seg.stay-long { background: #ff6b6b; }
+	.stay-seg.stay-short { background: #00e5ff; }
+	.stay-seg.stay-errand { background: #ffd60a; }
+	.stay-seg.stay-worker { background: #ff9f1c; }
+	.stay-seg.stay-allday { background: #ff6b6b; }
 
 	.stay-legend {
 		display: flex;
@@ -546,9 +549,10 @@
 		display: inline-block;
 	}
 
-	.stay-legend i.stay-visitor { background: #00e5ff; }
-	.stay-legend i.stay-commuter { background: #ffd60a; }
-	.stay-legend i.stay-long { background: #ff6b6b; }
+	.stay-legend i.stay-short { background: #00e5ff; }
+	.stay-legend i.stay-errand { background: #ffd60a; }
+	.stay-legend i.stay-worker { background: #ff9f1c; }
+	.stay-legend i.stay-allday { background: #ff6b6b; }
 
 	.comparison-block {
 		margin-bottom: 14px;

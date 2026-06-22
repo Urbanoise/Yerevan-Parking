@@ -103,7 +103,13 @@ function parseUnitedData(file, offLabel) {
 		if (firstWord(location) !== 'OS') o.offstreet += 1;
 	}
 
-	return { plateHours, hourPlates, obs, window: windowHours.size };
+	const wh = [...windowHours];
+	return {
+		plateHours, hourPlates, obs, window: windowHours.size,
+		// survey-window edges (first/last observed hour) for the 1-hour boundary rule
+		firstHour: wh.length ? Math.min(...wh) : null,
+		lastHour: wh.length ? Math.max(...wh) : null,
+	};
 }
 
 const sources = {};
@@ -450,25 +456,47 @@ geojson.displacement = computeDisplacement(geojson.features.filter(f => f.proper
 // --- Demand profile (#3 stay-length split + #4 hourly accumulation curve) ---
 // Both read the per-zone presence structures parseUnitedData already built. The
 // hourly VAP is Σ vehicles present each clock-hour; the stay split bins each plate by
-// how many hours it was seen — <2h visitor, 2–8h commuter, >8h all-day storage
-// (consistent with avg_duration_h, which is total hours present per vehicle).
+// how many hours it was seen. Four data-driven duration bins (the web app's split):
+//   ≤1h short visit · 2–4h errand/shopper · 5–8h worker · >8h all-day/overnight.
+// The 2–4h vs 5–8h cut separates two behaviours the old "commuter 2–8h" band
+// conflated (errand turnover vs all-day interception). avg_duration_h is total hours
+// present per vehicle. durationBlock also exposes the legacy three-way split
+// (visitor=short, commuter=errand+worker, long=all-day) so the .docx report
+// generators that read this geojson keep working unchanged.
+//
+// Approved 1-hour boundary rule (matches the report): a single-sweep stay seen ONLY
+// in the survey window's first or last hour is most likely an overnight vehicle
+// clipped by the daytime window (07:00–24:00), not a genuine ≤1h visit — so it is
+// reclassified from 'short' into 'allday' (overnight). This lifts the 8h+ band from
+// the raw ~2% to ~7% and trims ≤1h ~68%→~63%. A single-sweep stay in the interior
+// of the window is a real short visit and stays in 'short'.
 // Per-area profiles ride in areaStats (the stats board reads them by viewport area);
 // per-zone profiles go in geojson.zoneProfiles, keyed "area:zone", for click popups.
-const STAY_BIN = (dur) => (dur < 2 ? 'visitor' : dur <= 8 ? 'commuter' : 'long');
+function stayBin(hoursSet, firstHour, lastHour) {
+	const dur = hoursSet.size;
+	if (dur < 2) {
+		const h = [...hoursSet][0];
+		return (h === firstHour || h === lastHour) ? 'allday' : 'short';
+	}
+	return dur <= 4 ? 'errand' : dur <= 8 ? 'worker' : 'allday';
+}
 
-function durationTotals() { return { visitor: 0, commuter: 0, long: 0, durSum: 0, n: 0 }; }
-function addStay(t, dur) {
-	t.durSum += dur; t.n++;
-	const b = STAY_BIN(dur);
-	if (b === 'visitor') t.visitor++; else if (b === 'commuter') t.commuter++; else t.long++;
+function durationTotals() { return { short: 0, errand: 0, worker: 0, allday: 0, durSum: 0, n: 0 }; }
+function addStay(t, hoursSet, firstHour, lastHour) {
+	t.durSum += hoursSet.size; t.n++;
+	t[stayBin(hoursSet, firstHour, lastHour)]++;
 }
 function durationBlock(t) {
-	const tot = t.visitor + t.commuter + t.long || 1;
+	const tot = t.short + t.errand + t.worker + t.allday || 1;
+	const pct = (x) => round((x / tot) * 100);
 	return {
-		visitor: t.visitor, commuter: t.commuter, long: t.long,
-		visitorPct: round((t.visitor / tot) * 100),
-		commuterPct: round((t.commuter / tot) * 100),
-		longPct: round((t.long / tot) * 100),
+		// four data-driven bins
+		short: t.short, errand: t.errand, worker: t.worker, allday: t.allday,
+		shortPct: pct(t.short), errandPct: pct(t.errand),
+		workerPct: pct(t.worker), alldayPct: pct(t.allday),
+		// legacy three-way split, for the .docx report generators
+		visitor: t.short, commuter: t.errand + t.worker, long: t.allday,
+		visitorPct: pct(t.short), commuterPct: pct(t.errand + t.worker), longPct: pct(t.allday),
 		avg: round(t.durSum / (t.n || 1), 1),
 	};
 }
@@ -488,7 +516,7 @@ function areaProfile(areaKey) {
 			const hp = src.hourPlates.get(z);
 			if (hp) for (const [h, plates] of hp) vapMap.set(h, (vapMap.get(h) || 0) + plates.size);
 			const ph = src.plateHours.get(z);
-			if (ph) for (const hours of ph.values()) addStay(t, hours.size);
+			if (ph) for (const hours of ph.values()) addStay(t, hours, src.firstHour, src.lastHour);
 		}
 	}
 	const vap = [...vapMap.entries()].sort((a, b) => a[0] - b[0]);  // [[hour, vehicles], …]
@@ -503,9 +531,9 @@ function zoneProfile(area, zone) {
 	if (!hp && !ph) return null;
 	const vap = hp ? [...hp.entries()].sort((a, b) => a[0] - b[0]).map(([h, p]) => [h, p.size]) : [];
 	const t = durationTotals();
-	if (ph) for (const hours of ph.values()) addStay(t, hours.size);
+	if (ph) for (const hours of ph.values()) addStay(t, hours, src.firstHour, src.lastHour);
 	const dur = durationBlock(t);
-	return { vap, stay: { visitor: dur.visitor, commuter: dur.commuter, long: dur.long }, avg: dur.avg };
+	return { vap, stay: { short: dur.short, errand: dur.errand, worker: dur.worker, allday: dur.allday }, avg: dur.avg };
 }
 
 for (const k of Object.keys(areaStats)) areaStats[k].profile = areaProfile(k);
@@ -537,6 +565,6 @@ console.log(`Displacement: ${d.removed_zones} removed zones lose ${d.removed_sup
 	`net vs demand ${d.net_vs_demand >= 0 ? '+' : ''}${d.net_vs_demand}, vs supply ${d.net_vs_supply >= 0 ? '+' : ''}${d.net_vs_supply} (${d.absorbed}% absorbed)`);
 const ap = areaStats.all.profile;
 console.log(`Profile [all]: VAP ${ap.vap.length} hours (peak ${Math.max(...ap.vap.map(p => p[1]))}); ` +
-	`stay split ${ap.duration.visitorPct}% visitor / ${ap.duration.commuterPct}% commuter / ${ap.duration.longPct}% long, avg ${ap.duration.avg}h; ` +
+	`stay split ${ap.duration.shortPct}% ≤1h / ${ap.duration.errandPct}% 2–4h / ${ap.duration.workerPct}% 5–8h / ${ap.duration.alldayPct}% >8h, avg ${ap.duration.avg}h; ` +
 	`zoneProfiles: ${Object.keys(zoneProfiles).length}`);
 console.log(`Written ${GEOJSON_PATH} and ${YARDS_PATH}`);

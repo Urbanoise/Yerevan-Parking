@@ -4,10 +4,10 @@ then swap them into the redline working copy.
 
 Figure 10 — "Mitigation measures grouped by sensitivity zones" (card graphic):
   Komitas moves Medium->High; Open Residential Yards elevated into the High package;
-  Visitor caps marked targeted; footer notes the Gai Avenue carve-out and the
-  flagged (not-yet-adopted) annual-permit idea.
-Figure 11 — sensitivity map (static render from sensitivity-zones.geojson) with the
-  Komitas segment recoloured Medium->High.
+  Visitor caps marked targeted; a dedicated Gai Avenue (Mega Mall) panel notes
+  that its kerb parking stays for now (revisit as the area changes).
+Figure 11 — sensitivity map: the manually-refined "yerevan (2).png" placed in the
+  report folder is swapped in (supersedes the matplotlib render).
 
 Outputs PNG/JPEG beside the report and replaces word/media/image14.png (Fig 10) and
 word/media/image15.jpeg (Fig 11) inside "...20260417 (rev).docx".
@@ -29,7 +29,11 @@ RPT = os.path.join(ROOT, "Field Surveys/Field Surveys Report")
 SZ = os.path.join(ROOT, "app/static/data/wgs84/sensitivity-zones.geojson")
 REV = os.path.join(RPT, "Parking Analysis Report - 20260417 (rev).docx")
 FIG10 = os.path.join(RPT, "fig10_sensitivity_packages.png")
-FIG11 = os.path.join(RPT, "fig11_sensitivity_map.jpg")
+# Fig 11 swapped into the docx is the manually-refined map placed in the report
+# folder. The matplotlib block below renders to FIG11_RENDER (its own, unused
+# file) so it never overwrites the hand-made map that gets swapped in (FIG11).
+FIG11_RENDER = os.path.join(RPT, "fig11_sensitivity_map.jpg")
+FIG11 = os.path.join(RPT, "yerevan (2).png")
 
 # ----------------------------------------------------------------------------
 # FIGURE 10 — sensitivity-package cards
@@ -49,12 +53,10 @@ PANELS = [
     dict(title="Lower sensitivity", accent="#2e7d32", bg="#e9f5ea", ink="#1b5e20",
          streets="Bagratunyats, Sebastia, Raffi, Nor Nork, Sasna Tsrer",
          pills=["Organise free parking", "Park & Ride"]),
-    dict(title="Cross-cutting (from the field survey)", accent="#607d8b",
+    dict(title="Gai Avenue (Mega Mall)", accent="#607d8b",
          bg="#eef1f3", ink="#37474f", streets=None,
-         notes=["Gai Avenue / Mega Mall — site-specific carve-out: defer kerb "
-                "removal pending the mall's off-street parking.",
-                "Flagged idea, pending Parking City Service data: phase out the "
-                "flat annual permit."]),
+         notes=["Kerb parking stays for now; revisit as the area changes — "
+                "mall parking or the planned BRT."]),
 ]
 
 # layout constants (x range 0..100; y accumulates downward in 'units')
@@ -191,10 +193,10 @@ legend = [Line2D([0], [0], color=COLORS[s], lw=6, label=l) for s, l in
 leg = max_.legend(handles=legend, loc="upper left", frameon=True, fontsize=11,
                   labelcolor="white")
 leg.get_frame().set_facecolor("#222222"); leg.get_frame().set_edgecolor("#444444")
-mfig.savefig(FIG11, dpi=120, facecolor="#141414", bbox_inches="tight", pad_inches=0.15,
+mfig.savefig(FIG11_RENDER, dpi=120, facecolor="#141414", bbox_inches="tight", pad_inches=0.15,
              pil_kwargs={"quality": 90})
 plt.close(mfig)
-print("WROTE", FIG11)
+print("WROTE", FIG11_RENDER)
 
 # ----------------------------------------------------------------------------
 # Swap both images into the rev docx via python-docx parts (robust to media

@@ -14,9 +14,10 @@ from docx.oxml import OxmlElement
 
 GEO = r"C:/Users/user/Yerevan-Parking/app/static/data/wgs84/field-surveys.geojson"
 IMGDIR = r"C:/Users/user/Yerevan-Parking/Field Surveys/Field Surveys Report"
+CHARTS = IMGDIR + r"/Charts"  # generated charts + dashboard screenshots live here
 OUT = IMGDIR + r"/Yerevan Field Surveys - Findings Report.docx"
 
-# Displacement screenshots exported from the interactive dashboard (in IMGDIR).
+# Displacement screenshots exported from the interactive dashboard (in CHARTS).
 DISP_IMG = {
     "all": "All Areas Displacement.png",
     "kentron": "Kentron Displacement.png",
@@ -494,7 +495,7 @@ for a in DISP_ORDER:
     onstreet, offstreet = d_[2]["value"], d_[3]["value"]
     onpct, totalpct = d_[4]["value"], d_[5]["value"]
     heading(DISP_TITLE[a], 2)
-    add_image(IMGDIR + "/" + DISP_IMG[a],
+    add_image(CHARTS + "/" + DISP_IMG[a],
               caption=f"Displacement lens — {DISP_TITLE[a]} (interactive dashboard).")
     body(DISP_TEXT[a].format(
         disp=disp, removed=removed, onstreet=onstreet, offstreet=offstreet,
@@ -602,7 +603,7 @@ def _labels(ax, bars, fmt="{:.0f}", dy=3, size=8):
                     xytext=(0, dy), textcoords="offset points")
 
 def _save(fig, name):
-    path = IMGDIR + "/" + name
+    path = CHARTS + "/" + name
     fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return path

@@ -28,12 +28,12 @@ ROOT = r"C:/Users/user/Yerevan-Parking"
 RPT = os.path.join(ROOT, "Field Surveys/Field Surveys Report")
 SZ = os.path.join(ROOT, "app/static/data/wgs84/sensitivity-zones.geojson")
 REV = os.path.join(RPT, "Parking Analysis Report - 20260417 (rev).docx")
-FIG10 = os.path.join(RPT, "fig10_sensitivity_packages.png")
+FIG10 = os.path.join(RPT, "Charts", "fig10_sensitivity_packages.png")
 # Fig 11 swapped into the docx is the manually-refined map placed in the report
 # folder. The matplotlib block below renders to FIG11_RENDER (its own, unused
 # file) so it never overwrites the hand-made map that gets swapped in (FIG11).
-FIG11_RENDER = os.path.join(RPT, "fig11_sensitivity_map.jpg")
-FIG11 = os.path.join(RPT, "yerevan (2).png")
+FIG11_RENDER = os.path.join(RPT, "Charts", "fig11_sensitivity_map.jpg")
+FIG11 = os.path.join(RPT, "Charts", "yerevan (2).png")
 
 # ----------------------------------------------------------------------------
 # FIGURE 10 — sensitivity-package cards

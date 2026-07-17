@@ -254,7 +254,7 @@ export const STORY_STEPS = [
 	{
 		index: 9,
 		title: 'Field Surveys',
-		subtitle: 'Survey paths across four areas — zoom in to compare',
+		subtitle: 'Survey paths across six areas — zoom in to compare',
 		center: [44.516, 40.178],
 		zoom: 11.6,
 		pitch: 0,
@@ -265,10 +265,11 @@ export const STORY_STEPS = [
 		showLandmarks: false,
 		showFieldSurveys: true,
 		legendVisible: false,
-		// Merged Field Surveys step. The renamed "(Zone NN)" survey paths span four
-		// areas — Garegin Nzhdeh (zones 25–59), Gai Avenue (60–69), Komitas (70–122) and
-		// Shiraz/Hasratyan (123–156) — each with its off-street yard (GNOFF / Palace /
-		// KomitasCity / ShirazYard010). They can be viewed through three lenses,
+		// Merged Field Surveys step. The renamed "(Zone NN)" survey paths span six
+		// areas — Malatia-Sebastia (zones 2–24), Garegin Nzhdeh (25–59), Gai Avenue
+		// (60–69), Komitas (70–122), Shiraz/Hasratyan (123–156) and Kentron (lettered
+		// "(Zone K01)" tags) — each with its off-street yard (SebastiaYard006 / GNOFF /
+		// Palace / KomitasCity / ShirazYard010 / NalbandyanYard001). Three lenses,
 		// switched with a toggle in the legend panel: average daily occupancy, parking
 		// regulation (paid/free), and the post-BRT retain/remove decision. Each mode
 		// carries its own colorMode, static key, stats and description; defaultFieldMode

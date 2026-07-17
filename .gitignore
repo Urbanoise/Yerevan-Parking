@@ -15,6 +15,7 @@ Yerevan Shapes/
 # Build output
 build/
 .svelte-kit/
+__pycache__/
 
 # Transient KMZ extraction dirs and Excel lock files
 _tmp_kmz_*/

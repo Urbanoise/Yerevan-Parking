@@ -90,9 +90,6 @@ def chart_occupancy(stats, path):
     fig, ax = plt.subplots(figsize=(4.8, 2.55))
     y = range(len(rows))
     ax.barh(list(y), vals, color=colors, height=0.62, zorder=3)
-    ax.axvline(85, color=AXIS, ls=(0, (3, 3)), lw=1, zorder=2)
-    ax.text(85, -0.85, "85% threshold", va="bottom", ha="center",
-            fontsize=7.5, color=SECOND, style="italic")
     ax.axvline(100, color="#b0b0b0", lw=1, zorder=2)
 
     for i, v in enumerate(vals):
@@ -108,7 +105,7 @@ def chart_occupancy(stats, path):
     ax.set_axisbelow(True)
     bare(ax)
     # legend: identity never by colour alone
-    ax.barh([0], [0], color=RED, label="Over legal capacity")
+    ax.barh([0], [0], color=RED, label="Above capacity")
     ax.barh([0], [0], color=BLUE, label="Within capacity")
     ax.legend(loc="lower right", fontsize=7.5, frameon=False,
               handlelength=0.9, handleheight=0.9, borderpad=0.1)
@@ -132,7 +129,7 @@ def chart_hourly(stats, path):
 
     fig, ax = plt.subplots(figsize=(4.8, 1.85))
     ax.bar(hours, cars, color=colors, width=0.74, zorder=3)
-    ax.annotate("peak 10:00 · 1,431 cars",
+    ax.annotate("peak %02d:00 · %s cars" % (hours[peak], "{:,}".format(cars[peak])),
                 xy=(hours[peak], cars[peak]), xytext=(hours[peak] + 1.5, cars[peak] + 230),
                 fontsize=8, color=INK, fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=AXIS, lw=1))
@@ -161,10 +158,9 @@ def chart_stay(stats, path):
     x = 0.0
     for name, pct, col in segs:
         ax.barh([0], [pct], left=[x], color=col, height=0.5, zorder=3)
-        if pct >= 10:                      # direct label only where it fits
-            ax.text(x + pct / 2.0, 0, "%d%%" % pct, va="center", ha="center",
-                    fontsize=9, fontweight="bold",
-                    color="white" if col != RAMP[0] else INK)
+        ax.text(x + pct / 2.0, 0, "%d%%" % pct, va="center", ha="center",
+                fontsize=9, fontweight="bold",
+                color="white" if col != RAMP[0] else INK)
         x += pct + 0.55                    # ~2px surface gap between fills
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in segs]
     ax.legend(handles, ["%s · %d%%" % (n, p) for n, p, _ in segs],
@@ -207,14 +203,16 @@ def chart_absorption(disp, path):
     fig, ax = plt.subplots(figsize=(4.8, 1.25))
     ax.barh([0], [on], color=BLUE, height=0.5, zorder=3)
     ax.barh([0], [need_off], left=[on + 6], color=VIOLET, height=0.5, zorder=3)
-    ax.text(on / 2.0, 0, "391", va="center", ha="center", fontsize=10,
+    ax.text(on / 2.0, 0, "{:,}".format(on), va="center", ha="center", fontsize=10,
             fontweight="bold", color="white")
-    ax.text(on + 6 + need_off / 2.0, 0, "517", va="center", ha="center",
-            fontsize=10, fontweight="bold", color="white")
+    ax.text(on + 6 + need_off / 2.0, 0, "{:,}".format(need_off), va="center",
+            ha="center", fontsize=10, fontweight="bold", color="white")
     handles = [plt.Rectangle((0, 0), 1, 1, color=BLUE),
                plt.Rectangle((0, 0), 1, 1, color=VIOLET)]
-    ax.legend(handles, ["Absorbed on nearby streets · 43%",
-                        "Must find off-street · 57%"],
+    ax.legend(handles, ["Absorbed on nearby streets · %d%%"
+                        % round(100.0 * on / disp["removed_demand"]),
+                        "Must find off-street · %d%%"
+                        % round(100.0 * need_off / disp["removed_demand"])],
               loc="lower left", bbox_to_anchor=(0, -0.85), ncol=1, fontsize=7.5,
               frameon=False, handlelength=0.9, handleheight=0.9, borderpad=0)
     ax.set_xlim(0, 950)

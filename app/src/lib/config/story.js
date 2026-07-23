@@ -1,3 +1,14 @@
+// Corridors withheld from the whole app — geometry and figures alike. Corridor 03 is
+// hidden while its conceptual design is outstanding: it has no redesign geometry, so it
+// would otherwise appear as supply that is never removed and quietly flatter every
+// retention number. MapEngine drops matching features at load (they are tagged by
+// tag_corridors.mjs), and the `stats` blocks below are the C1+C2 subtotals.
+//
+// To bring Corridor 03 back: empty this array, then restore the totals flagged
+// "C1+C2 only" in the step configs — the figures are static, so they do NOT follow
+// this constant automatically.
+export const HIDDEN_CORRIDORS = ['Corridor 03'];
+
 export const STORY_STEPS = [
 	{
 		index: 0,
@@ -17,7 +28,7 @@ export const STORY_STEPS = [
 	{
 		index: 1,
 		title: 'Study Corridors',
-		subtitle: 'Three primary routes of analysis',
+		subtitle: 'Two primary routes of analysis',
 		center: [44.505, 40.165],
 		zoom: 12.8,
 		pitch: 20,
@@ -31,7 +42,6 @@ export const STORY_STEPS = [
 		legendLayers: [
 			{ id: 'corridor-1', label: 'Corridor 01', color: '#ffaa00' },
 			{ id: 'corridor-2', label: 'Corridor 02', color: '#55aaff' },
-			{ id: 'corridor-3', label: 'Corridor 03', color: '#00aa00' },
 		],
 	},
 	{
@@ -67,9 +77,14 @@ export const STORY_STEPS = [
 				]
 			}
 		],
+		// On-corridor supply by regulation — C1+C2 only, summing to 6,095. Two exclusions
+		// sit behind that figure: Corridor 03 (896 spaces, see HIDDEN_CORRIDORS) and the
+		// Nalbandyan016 segment (14 Zone A spaces), which is tagged impact=corridor but
+		// lies wholly outside every corridor boundary polygon. With both restored the
+		// total is the 7,005 quoted in the earlier reports.
 		stats: [
-			{ value: 6144, label: 'Free Parking Spaces', color: '#ffffff' },
-			{ value: 260, label: 'Red Spaces', color: '#EF5350' },
+			{ value: 5248, label: 'Free Parking Spaces', color: '#ffffff' },
+			{ value: 246, label: 'Red Spaces', color: '#EF5350' },
 			{ value: 534, label: 'Blue Spaces', color: '#42a5f5' },
 			{ value: 67, label: 'Taxi Spaces', color: '#888888' },
 		],
@@ -213,7 +228,6 @@ export const STORY_STEPS = [
 		legendLayers: [
 			{ id: 'corridor-1', label: 'Corridor 01', color: '#ffaa00' },
 			{ id: 'corridor-2', label: 'Corridor 02', color: '#55aaff' },
-			{ id: 'corridor-3', label: 'Corridor 03', color: '#00aa00' },
 		],
 		topSlider: true,
 		topSliderOptions: [10, 20, 30, 50],
@@ -227,6 +241,13 @@ export const STORY_STEPS = [
 		index: 8,
 		title: 'Post-BRT Parking Index',
 		subtitle: 'Spaces retained after BRT corridor introduction',
+		// Retained figures come from the 23 Jul 2026 conceptual design, v2 export
+		// (Parking New Design/New Design Parking 23072026 v2.kmz → new-design-parking.geojson),
+		// reconciled by convert_new_design.mjs to the signed-off totals in
+		// Final Presentation/Retention Numbers.xlsx.
+		// C1+C2 only. Corridor 03 is withheld (HIDDEN_CORRIDORS) pending its design, and
+		// its 896 fully-retained spaces are out of both sides of the comparison — with it
+		// included the retention rate reads 30% instead of 20%.
 		center: [44.505, 40.178],
 		zoom: 12.4,
 		pitch: 0,
@@ -245,11 +266,13 @@ export const STORY_STEPS = [
 			{ id: 'new-c2', label: 'Corridor 02', color: '#0288D1' },
 		],
 		stats: [
-			{ value: 1012, label: 'Total Retained', color: '#4CAF50' },
-			{ value: 522, label: 'Corridor 01', color: '#F9A825' },
-			{ value: 490, label: 'Corridor 02', color: '#0288D1' },
+			{ value: 1220, label: 'Total Retained', color: '#4CAF50' },
+			{ value: 869, label: 'Corridor 01', color: '#F9A825' },
+			{ value: 351, label: 'Corridor 02', color: '#0288D1' },
 		],
-		comparison: { current: 7005, retained: 1012 },
+		// `current` is on-corridor supply for C1+C2 only (2,349 + 3,746), excluding both
+		// Corridor 03 and the out-of-boundary Nalbandyan016 segment.
+		comparison: { current: 6095, retained: 1220 },
 	},
 	{
 		index: 9,

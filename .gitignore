@@ -22,3 +22,8 @@ _tmp_kmz_*/
 ~$*
 # Scratch-unzipped Excel/zip internals
 **/_x/
+
+# Raw CAD from the BRT design team (~23 MB). Source material for the conceptual
+# design, not consumed by the app or any converter — the design reaches the repo as
+# the exported KMZ in Parking New Design/.
+*.dwg

@@ -3,7 +3,7 @@
 	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS, OCCUPANCY_COLOR } from '$lib/layers/layers.js';
-	import { STORY_STEPS } from '$lib/config/story.js';
+	import { STORY_STEPS, HIDDEN_CORRIDORS } from '$lib/config/story.js';
 
 	const MAX_TOP_LOTS = 50;
 
@@ -426,19 +426,46 @@
 				fetch('/data/wgs84/field-survey-yards.geojson').then(r => r.json()),
 			]);
 
+			// Drop withheld corridors before anything else sees the data, so every layer,
+			// popup, legend count and top-lots marker is filtered by one rule rather than
+			// each needing its own filter expression. Supply layers carry a `corridor`
+			// property from tag_corridors.mjs; the corridor alignment/boundary files are
+			// matched on their own name instead.
+			if (HIDDEN_CORRIDORS.length) {
+				const hidden = new Set(HIDDEN_CORRIDORS);
+				const drop = (fc, key) => {
+					if (!fc?.features) return fc;
+					fc.features = fc.features.filter(f => !hidden.has(f.properties?.[key]));
+					return fc;
+				};
+				for (const fc of [linesData, areasData, sensitivityData]) drop(fc, 'corridor');
+				for (const fc of [corridorsData, boundariesData]) drop(fc, 'name');
+				// field-surveys is deliberately NOT filtered. The occupancy survey is a
+				// measured record of what was counted on the ground, and its areaStats /
+				// displacement blocks are precomputed over all 208 zones — filtering the
+				// geometry alone would draw a different set than the panel reports. The six
+				// Corridor 03 zones (Garegin Nzhdeh; 9 spaces removed, 57 retained) stay in.
+			}
+			// Facilities withdrawn from the inventory by normalize_offstreet_capacity.mjs.
+			areasData.features = areasData.features.filter(f => !f.properties.excluded);
+
 			// Per-area dashboard numbers travel inside the field-surveys file.
 			fieldSurveyStats.set(fieldSurveysData.areaStats ?? null);
 			// Per-zone demand profiles (hourly curve + stay split), keyed "area:zone",
 			// for the click popups. Captured here so the popup builder can read them.
 			const zoneProfiles = fieldSurveysData.zoneProfiles ?? {};
 
-			// Parse "Space: N" from each area's HTML description into a numeric `space`
-			// property (so popups and labels can read it directly), then flag the top N
-			// lots by capacity for the highlight step.
+			// Capacity is resolved upstream by normalize_offstreet_capacity.mjs, which owns
+			// the description-format quirks and the agreed per-facility overrides. Read the
+			// numeric `space` it wrote; the regex below is only a fallback for a file that
+			// predates that script, and deliberately tolerates "space : 16" as well as
+			// "Space: 16" — the stricter pattern used to score that facility 0.
 			for (const f of areasData.features) {
-				const html = f.properties.description?.value || '';
-				const m = html.match(/Space:\s*(\d+)/i);
-				f.properties.space = m ? parseInt(m[1], 10) : 0;
+				if (typeof f.properties.space !== 'number') {
+					const html = f.properties.description?.value || '';
+					const m = html.replace(/&nbsp;/g, ' ').match(/space\s*:?\s*(\d+)/i);
+					f.properties.space = m ? parseInt(m[1], 10) : 0;
+				}
 				// Mall/City/Tonavachar in name = commercial; everything else (mostly Yard###) = yard.
 				f.properties.category = /mall|city|tonavachar/i.test(f.properties.name || '') ? 'commercial' : 'yard';
 			}

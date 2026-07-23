@@ -188,7 +188,9 @@ def chart_displacement(disp, path):
     ax.set_yticks([0, 1])
     ax.set_yticklabels([r[0] for r in rows], fontsize=8.5, color=INK)
     ax.invert_yaxis()
-    ax.set_xlim(0, 1980)
+    # derived, not fixed: the headroom has to keep the value label inside the axes,
+    # and these figures move whenever the conceptual design is revised
+    ax.set_xlim(0, max(r[1] for r in rows) * 1.18)
     ax.set_xticks([])
     bare(ax)
     fig.tight_layout(pad=0.3)
@@ -215,7 +217,9 @@ def chart_absorption(disp, path):
                         % round(100.0 * need_off / disp["removed_demand"])],
               loc="lower left", bbox_to_anchor=(0, -0.85), ncol=1, fontsize=7.5,
               frameon=False, handlelength=0.9, handleheight=0.9, borderpad=0)
-    ax.set_xlim(0, 950)
+    # the two segments span the whole displaced-demand figure, so the limit must
+    # follow it — a fixed value silently clips the bar when demand rises
+    ax.set_xlim(0, (on + 6 + need_off) * 1.02)
     ax.set_ylim(-0.45, 0.45)
     ax.set_xticks([]), ax.set_yticks([])
     bare(ax)

@@ -559,6 +559,41 @@ for (const y of yards.features) {
 	console.log(`Yard ${y.properties.name}: cap ${y.properties.space}  occupancy ${y.properties.occupancy_pct}%  (${y.properties.unique_vehicles} vehicles)`);
 }
 console.log(`Windows — komitas: ${sources.komitas.window}h, shiraz: ${sources.shiraz.window}h`);
+
+// --- Basis check: per-zone peaks vs one shared clock hour ---
+// The headline occupancy above sums each zone's OWN busiest hour, which is the right
+// figure for "how hard is this kerb worked" but counts cars that were never present at
+// the same moment. Displacement instead uses a single clock hour (peakHourDemand), the
+// right figure for "how many cars need re-homing at once". Both are legitimate; they are
+// not comparable, and the two sit side by side on the deck's per-area table. Printing
+// them together keeps the gap visible rather than leaving it to be rediscovered.
+console.log('Occupancy basis — sum of per-zone peaks vs single shared hour:');
+let totCap = 0, totSummed = 0, totShared = 0;
+for (const area of ['malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz']) {
+	const zones = geojson.features.filter(f => f.properties.area === area
+		&& f.properties.peak_occupancy != null && (f.properties.space || 0) > 0);
+	const cap = zones.reduce((s, f) => s + f.properties.space, 0);
+	const summed = zones.reduce((s, f) => s + f.properties.peak_occupancy, 0);
+	const shared = peakHourDemand(zones);
+	// which clock hour carries that shared peak — areas do not share one city-wide hour
+	const src = sources[area];
+	let bestHour = null, bestN = -1;
+	if (src) {
+		const hours = new Set();
+		for (const z of zones) { const zh = src.hourPlates.get(z.properties.zone); if (zh) for (const h of zh.keys()) hours.add(h); }
+		for (const h of [...hours].sort((a, b) => a - b)) {
+			let n = 0;
+			for (const z of zones) n += src.hourPlates.get(z.properties.zone)?.get(h)?.size || 0;
+			if (n > bestN) { bestN = n; bestHour = h; }
+		}
+	}
+	totCap += cap; totSummed += summed; totShared += shared;
+	const pct = (v) => (cap ? Math.round((v / cap) * 100) : 0);
+	console.log(`  ${area.padEnd(8)} cap ${String(cap).padStart(4)} | summed peaks ${String(summed).padStart(4)} = ${String(pct(summed)).padStart(3)}%`
+		+ ` | single hour ${String(shared).padStart(4)} = ${String(pct(shared)).padStart(3)}% at ${String(bestHour).padStart(2)}:00`);
+}
+console.log(`  ${'ALL'.padEnd(8)} cap ${String(totCap).padStart(4)} | summed peaks ${String(totSummed).padStart(4)} = ${Math.round(100 * totSummed / totCap)}%`
+	+ ` | single hour ${String(totShared).padStart(4)} = ${Math.round(100 * totShared / totCap)}% (each area at its own peak hour)`);
 const d = geojson.displacement;
 console.log(`Displacement: ${d.removed_zones} removed zones lose ${d.removed_supply} spaces / ${d.removed_demand} cars at peak hour; ` +
 	`counted capacity ${d.absorb_capacity} (yellow on-street ${d.absorb_onstreet} + off-street ${d.absorb_offstreet}; green ${d.absorb_green_surveyed} shown but excluded) → ` +

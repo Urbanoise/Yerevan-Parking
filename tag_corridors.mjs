@@ -13,6 +13,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 
 const DIR = 'app/static/data/wgs84/';
+const OUTSIDE_BOUNDARIES = 'outside corridor boundaries';
 const rd = n => JSON.parse(readFileSync(DIR + n, 'utf8'));
 const bounds = rd('corridor-boundaries.geojson');
 
@@ -52,11 +53,28 @@ function corridorOf(geometry) {
 for (const file of ['parking-lines.geojson', 'parking-areas.geojson', 'field-surveys.geojson', 'sensitivity-zones.geojson']) {
 	const geo = rd(file);
 	const counts = {};
+	let orphaned = 0;
 	for (const f of geo.features) {
 		const c = corridorOf(f.geometry);
 		f.properties.corridor = c;
 		counts[c ?? 'none'] = (counts[c ?? 'none'] || 0) + 1;
+		// A segment tagged impact=corridor that sits inside no corridor boundary is not
+		// on-corridor supply, whatever its tag claims. Flagging it is what actually keeps
+		// it out of the app's figures: the stats panel counts live from the served
+		// GeoJSON by impact, so a corridor-less feature would otherwise slip past the
+		// hidden-corridor filter and be counted anyway. Currently just Nalbandyan016
+		// (14 Zone A spaces), excluded from the published totals by client decision.
+		// Only ever touch the reason this script owns. normalize_offstreet_capacity.mjs
+		// sets `excluded` on parking-areas for its own reason, and clearing the field
+		// unconditionally here silently un-excluded that facility.
+		if (!c && f.properties.impact === 'corridor') {
+			f.properties.excluded = OUTSIDE_BOUNDARIES;
+			orphaned++;
+		} else if (f.properties.excluded === OUTSIDE_BOUNDARIES) {
+			delete f.properties.excluded;
+		}
 	}
+	if (orphaned) console.log(`  ${orphaned} feature(s) flagged excluded (impact=corridor, inside no boundary)`);
 	writeFileSync(DIR + file, JSON.stringify(geo));
 	console.log(`${file.padEnd(26)} ${geo.features.length} features → ${JSON.stringify(counts)}`);
 }

@@ -446,8 +446,13 @@
 				// geometry alone would draw a different set than the panel reports. The six
 				// Corridor 03 zones (Garegin Nzhdeh; 9 spaces removed, 57 retained) stay in.
 			}
-			// Facilities withdrawn from the inventory by normalize_offstreet_capacity.mjs.
+			// Features withdrawn from the published inventory upstream: off-street
+			// facilities by normalize_offstreet_capacity.mjs, and on-street segments
+			// tagged impact=corridor that lie inside no corridor boundary by
+			// tag_corridors.mjs. This has to happen here rather than in a layer filter —
+			// the stats panel counts live from this data, not from the rendered layers.
 			areasData.features = areasData.features.filter(f => !f.properties.excluded);
+			linesData.features = linesData.features.filter(f => !f.properties.excluded);
 
 			// Per-area dashboard numbers travel inside the field-surveys file.
 			fieldSurveyStats.set(fieldSurveysData.areaStats ?? null);

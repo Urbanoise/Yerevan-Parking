@@ -12,7 +12,7 @@ export const HIDDEN_CORRIDORS = ['Corridor 03'];
 export const STORY_STEPS = [
 	{
 		index: 0,
-		title: 'Yerevan Parking Supply',
+		title: 'Yerevan Parking Assessment',
 		subtitle: 'A spatial inventory of on-street and off-street parking across the city',
 		isIntro: true,
 		center: [44.5036, 40.1735],

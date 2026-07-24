@@ -29,10 +29,20 @@ npm run build      # production build → app/build/ (adapter-static)
 npm run preview    # serve the static build on :5173  ← the user views THIS, not dev
 npm run dev        # vite dev server (not the user's normal workflow)
 
-# Data converters (run from repo ROOT, Node ESM)
+# Data converters (run from repo ROOT, Node ESM) — these two are steps 1 and 3 of the
+# field-survey chain; do not run them on their own, see "regeneration order" below
 node convert_field_surveys.mjs          # KML + XLSX → field-surveys.geojson + yards
 node compute_field_survey_metrics.mjs   # merge occupancy/turnover metrics + areaStats
 node convert_new_design.mjs             # New Design KML → new-design-parking.geojson
+
+# Post-processing — see the ordering rule below; these are NOT optional
+node apply_retained_review.mjs --apply  # review-workbook retained/removed flags (no --apply = dry run)
+node tag_corridors.mjs                  # re-derive the `corridor` tag on every supply file
+
+# Off-street (parking-areas.geojson) — independent of the field-survey chain
+node normalize_offstreet_capacity.mjs   # resolve description HTML → numeric `space`
+node compute_offstreet_city_metrics.mjs # KomitasCity yard occupancy/turnover
+node gen_retained_review.mjs            # regenerate the review workbook itself (rarely needed)
 
 # Reports (run from repo root; needs python-docx + matplotlib)
 python gen_field_survey_report.py       # Field Surveys findings report .docx
@@ -40,6 +50,25 @@ python gen_output8_change_plan.py       # redline change-plan for review
 python apply_output8_edits.py           # apply approved edits → "...(rev).docx"
 python gen_output10_figures.py          # Figures 10/11, swapped into the rev .docx
 ```
+
+> **IMPORTANT — regeneration order.** `convert_field_surveys.mjs` rebuilds
+> `field-surveys.geojson` from scratch, which **silently discards two later passes**. Never
+> run it alone; run the whole chain, in this order:
+>
+> ```bash
+> node convert_field_surveys.mjs         # 1. rebuild from KML + workbooks
+> node apply_retained_review.mjs --apply # 2. re-apply retained/removed flags (step 1 reverts them)
+> node compute_field_survey_metrics.mjs  # 3. recompute displacement/areaStats against those flags
+> node tag_corridors.mjs                 # 4. re-add the `corridor` property (step 1 drops it)
+> ```
+>
+> Steps 2 and 4 are additive and idempotent, so re-running the chain is always safe — but
+> skipping them is not: you lose the review flags and the corridor tags with no error. The
+> flags are only provisional this way; when they are signed off for good, write them into
+> each workbook's `RetainedRemoved` sheet so step 1 produces them directly and step 2 becomes
+> a no-op. To verify a regeneration changed nothing, diff the result against `git show
+> HEAD:app/static/data/wgs84/field-surveys.geojson` — feature properties plus the
+> `areaStats` / `displacement` / `zoneProfiles` blocks.
 
 > **IMPORTANT — preview workflow:** the user reviews the static `app/build/` via
 > `npm run preview` (port 5173), not the vite dev server. After editing anything under
@@ -90,7 +119,9 @@ dashboard numbers) produced by `compute_field_survey_metrics.mjs`.
 ```
 raw KML/KMZ/XLSX (Field Surveys/, Parking New Design/)
    │  convert_field_surveys.mjs        (extracts "(Zone NN)" survey paths, tags each with an area)
+   │  apply_retained_review.mjs --apply (re-applies the review workbook's retained/removed flags)
    │  compute_field_survey_metrics.mjs (joins license-plate occupancy logs → occupancy/turnover/areaStats)
+   │  tag_corridors.mjs                (geometric corridor membership → `corridor` on every supply file)
    ▼
 app/static/data/wgs84/*.geojson  ── served by the app AND read by the report scripts
    │  gen_*_report.py / gen_*_figures.py / apply_*_edits.py

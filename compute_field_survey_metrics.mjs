@@ -13,9 +13,9 @@ import xlsx from 'xlsx';
 // are measured against the legal supply already on the map.
 //   • Garegin Nzhdeh   — Garegin Nzhdeh St - Analysis (zones 25–59, 7:00–23:00)
 //                         off-street log labelled "Off-street" → GNOFF yard
-//   • Gai Avenue       — Mega Mall - Analysis (zones 60–69, 7:00–22:00)
+//   • Gai Avenue       — Gai Avenue - Analysis (zones 60–69, 7:00–22:00)
 //                         off-street log labelled "P" (Palace lot) → Palace yard
-//   • Komitas          — Parking Survey Sheet v5  (zones 70–122, 7:00–23:00)
+//   • Komitas          — Komitas - Analysis (zones 70–122, 7:00–23:00)
 //                         off-street log labelled "Off street city" → KomitasCity yard
 //   • Shiraz/Hasratyan — Shiraz, Hasratyan - Analysis (zones 123–156, 7:00–23:00)
 //                         off-street log labelled "Shiraz off-street" → ShirazYard010
@@ -31,8 +31,8 @@ const SOURCES = [
 	{ area: 'malatia', file: 'Field Surveys/Malatia Sebastia - Analysis.xlsx', offLabel: 'Off-street', yard: 'SebastiaYard006' },
 	{ area: 'kentron', file: 'Field Surveys/Kentron - Analysis.xlsx', offLabel: 'Off-street', yard: 'NalbandyanYard001' },
 	{ area: 'garegin', file: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx', offLabel: 'Off-street', yard: 'GNOFF' },
-	{ area: 'mega', file: 'Field Surveys/Mega Mall - Analysis.xlsx', offLabel: 'P', yard: 'Palace' },
-	{ area: 'komitas', file: 'Field Surveys/Parking Survey Sheet v5.xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
+	{ area: 'mega', file: 'Field Surveys/Gai Avenue - Analysis.xlsx', offLabel: 'P', yard: 'Palace' },
+	{ area: 'komitas', file: 'Field Surveys/Komitas - Analysis.xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
 	{ area: 'shiraz', file: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx', offLabel: 'Shiraz off-street', yard: 'ShirazYard010' },
 ];
 

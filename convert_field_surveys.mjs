@@ -5,8 +5,8 @@ import XLSX from 'xlsx';
 // the Field Surveys KML. The survey now spans five areas:
 //   • Malatia-Sebastia — zones 2–24    (Malatia Sebastia - Analysis; Sebastia/Raffi)
 //   • Garegin Nzhdeh   — zones 25–59   (Garegin Nzhdeh St - Analysis)
-//   • Gai Avenue       — zones 60–69   (Mega Mall - Analysis)
-//   • Komitas          — zones 70–122  (Parking Survey Sheet v5)
+//   • Gai Avenue       — zones 60–69   (Gai Avenue - Analysis)
+//   • Komitas          — zones 70–122  (Komitas - Analysis)
 //   • Shiraz/Hasratyan — zones 123–156 (Shiraz, Hasratyan - Analysis)
 // Each path is tagged with an `area` so the Field Surveys story step can resolve
 // per-area dashboard numbers as the reader zooms between the neighbourhoods.
@@ -67,8 +67,8 @@ const RETAINED_SOURCES = {
 	malatia: 'Field Surveys/Malatia Sebastia - Analysis.xlsx',
 	kentron: 'Field Surveys/Kentron - Analysis.xlsx',
 	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx',
-	mega: 'Field Surveys/Mega Mall - Analysis.xlsx',
-	komitas: 'Field Surveys/Parking Survey Sheet v5.xlsx',
+	mega: 'Field Surveys/Gai Avenue - Analysis.xlsx',
+	komitas: 'Field Surveys/Komitas - Analysis.xlsx',
 	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx',
 };
 const retainedByArea = {};

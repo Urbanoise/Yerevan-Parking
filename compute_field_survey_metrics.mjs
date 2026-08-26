@@ -28,12 +28,12 @@ const YARDS_PATH = 'app/static/data/wgs84/field-survey-yards.geojson';
 // Malatia-Sebastia (Sebastia/Raffi) uses the SebastiaYard006 polygon for its
 // "Off-street" log (101 spaces, see KML_YARDS in convert_field_surveys.mjs).
 const SOURCES = [
-	{ area: 'malatia', file: 'Field Surveys/Malatia Sebastia - Analysis.xlsx', offLabel: 'Off-street', yard: 'SebastiaYard006' },
-	{ area: 'kentron', file: 'Field Surveys/Kentron - Analysis.xlsx', offLabel: 'Off-street', yard: 'NalbandyanYard001' },
-	{ area: 'garegin', file: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx', offLabel: 'Off-street', yard: 'GNOFF' },
-	{ area: 'mega', file: 'Field Surveys/Gai Avenue - Analysis.xlsx', offLabel: 'P', yard: 'Palace' },
-	{ area: 'komitas', file: 'Field Surveys/Komitas - Analysis.xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
-	{ area: 'shiraz', file: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx', offLabel: 'Shiraz off-street', yard: 'ShirazYard010' },
+	{ area: 'malatia', file: 'Field Surveys/Malatia Sebastia - Analysis (corrected 24082026).xlsx', offLabel: 'Off-street', yard: 'SebastiaYard006' },
+	{ area: 'kentron', file: 'Field Surveys/Kentron - Analysis (corrected 24082026).xlsx', offLabel: 'Off-street', yard: 'NalbandyanYard001' },
+	{ area: 'garegin', file: 'Field Surveys/Garegin Nzhdeh St - Analysis (corrected 24082026).xlsx', offLabel: 'Off-street', yard: 'GNOFF' },
+	{ area: 'mega', file: 'Field Surveys/Gai Avenue - Analysis (corrected 24082026).xlsx', offLabel: 'P', yard: 'Palace' },
+	{ area: 'komitas', file: 'Field Surveys/Komitas - Analysis (corrected 24082026).xlsx', offLabel: 'Off street city', yard: 'KomitasCity' },
+	{ area: 'shiraz', file: 'Field Surveys/Shiraz, Hasratyan - Analysis (corrected 24082026).xlsx', offLabel: 'Shiraz off-street', yard: 'ShirazYard010' },
 ];
 
 const firstWord = (v) => (v == null ? '' : String(v).trim().split(/\s+/)[0]);

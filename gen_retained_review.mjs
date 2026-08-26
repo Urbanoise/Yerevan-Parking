@@ -17,7 +17,7 @@ import XLSX from 'xlsx';
 
 const DIR = 'app/static/data/wgs84/';
 const OUT = 'Field Surveys/RetainedRemoved Review - 23072026.xlsx';
-const AREAS = { kentron: 'Kentron - Analysis.xlsx', komitas: 'Komitas - Analysis.xlsx' };
+const AREAS = { kentron: 'Kentron - Analysis (corrected 24082026).xlsx', komitas: 'Komitas - Analysis (corrected 24082026).xlsx' };
 
 const NEAR = 15;            // m from a design segment to count a vertex as kept
 const KEEP_FRACTION = 0.5;  // share of vertices that must be near to call it retained

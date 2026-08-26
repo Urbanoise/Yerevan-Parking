@@ -64,12 +64,12 @@ const EXCLUDED_ZONES = new Set([40]);
 // A zone with no entry — or an area whose workbook lacks the sheet — defaults to
 // retained.
 const RETAINED_SOURCES = {
-	malatia: 'Field Surveys/Malatia Sebastia - Analysis.xlsx',
-	kentron: 'Field Surveys/Kentron - Analysis.xlsx',
-	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx',
-	mega: 'Field Surveys/Gai Avenue - Analysis.xlsx',
-	komitas: 'Field Surveys/Komitas - Analysis.xlsx',
-	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx',
+	malatia: 'Field Surveys/Malatia Sebastia - Analysis (corrected 24082026).xlsx',
+	kentron: 'Field Surveys/Kentron - Analysis (corrected 24082026).xlsx',
+	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis (corrected 24082026).xlsx',
+	mega: 'Field Surveys/Gai Avenue - Analysis (corrected 24082026).xlsx',
+	komitas: 'Field Surveys/Komitas - Analysis (corrected 24082026).xlsx',
+	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis (corrected 24082026).xlsx',
 };
 const retainedByArea = {};
 for (const [area, file] of Object.entries(RETAINED_SOURCES)) {

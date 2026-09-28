@@ -287,7 +287,7 @@ export const LANDMARKS_LABELS = {
 		'text-size': 12,
 		'text-offset': [0, 1.5],
 		'text-anchor': 'top',
-		'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+		'text-font': ['Noto Sans Regular'],
 		visibility: 'none'
 	},
 	paint: {

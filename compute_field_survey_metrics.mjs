@@ -217,7 +217,7 @@ function statsForArea(areaKey) {
 		occupancy: [
 			{ value: capSum ? round((peakSum / capSum) * 100) : 0, label: 'Peak Occupancy % (cap-weighted)', color: '#2ecc71' },
 			{ value: surveyed.length ? round((over85 / surveyed.length) * 100) : 0, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
-			{ value: overCap, label: 'Zones Over Capacity', color: '#ff1f44' },
+			{ value: overCap, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 		],
 		paidfree: [
 			{ value: fs.length, label: 'Survey Paths', color: '#00e5ff' },

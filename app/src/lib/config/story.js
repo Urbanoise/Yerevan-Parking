@@ -307,18 +307,18 @@ export const STORY_STEPS = [
 				label: 'Avg Occupancy',
 				colorMode: 'field-occupancy',
 				staticKey: {
-					title: 'Avg occupancy (% of capacity)',
+					title: 'Daily avg occupancy (% of capacity)',
 					items: [
 						{ label: '≤85% — within capacity', color: '#2ecc71' },
 						{ label: '86–100% — at capacity', color: '#ff8a8a' },
-						{ label: '>100% — over capacity', color: '#ff4d4d' },
+						{ label: '>100% — over capacity all day on average', color: '#ff4d4d' },
 						{ label: 'Dashed purple outline — off-street yard', color: '#7c4dff' },
 					],
 				},
 				stats: [
 					{ value: 93, label: 'Peak Occupancy % (cap-weighted)', color: '#2ecc71' },
 					{ value: 69, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
-					{ value: 116, label: 'Zones Over Capacity', color: '#ff1f44' },
+					{ value: 116, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 				],
 			},
 			{

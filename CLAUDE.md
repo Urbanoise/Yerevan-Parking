@@ -29,17 +29,46 @@ npm run build      # production build → app/build/ (adapter-static)
 npm run preview    # serve the static build on :5173  ← the user views THIS, not dev
 npm run dev        # vite dev server (not the user's normal workflow)
 
-# Data converters (run from repo ROOT, Node ESM)
+# Data converters (run from repo ROOT, Node ESM) — these two are steps 1 and 3 of the
+# field-survey chain; do not run them on their own, see "regeneration order" below
 node convert_field_surveys.mjs          # KML + XLSX → field-surveys.geojson + yards
 node compute_field_survey_metrics.mjs   # merge occupancy/turnover metrics + areaStats
 node convert_new_design.mjs             # New Design KML → new-design-parking.geojson
 
+# Post-processing — see the ordering rule below; these are NOT optional
+node apply_retained_review.mjs --apply  # review-workbook retained/removed flags (no --apply = dry run)
+node tag_corridors.mjs                  # re-derive the `corridor` tag on every supply file
+
+# Off-street (parking-areas.geojson) — independent of the field-survey chain
+node normalize_offstreet_capacity.mjs   # resolve description HTML → numeric `space`
+node compute_offstreet_city_metrics.mjs # KomitasCity yard occupancy/turnover
+node gen_retained_review.mjs            # regenerate the review workbook itself (rarely needed)
+
 # Reports (run from repo root; needs python-docx + matplotlib)
 python gen_field_survey_report.py       # Field Surveys findings report .docx
-python gen_output8_change_plan.py       # redline change-plan for review
-python apply_output8_edits.py           # apply approved edits → "...(rev).docx"
-python gen_output10_figures.py          # Figures 10/11, swapped into the rev .docx
+python gen_o8_report_figures.py         # re-cut every Output 8 figure from the GeoJSON
+python gen_o8_figures_24082026.py       # swap a re-rendered figure into the Output 8 rev
+python gen_o10_figures_14082026.py      # Output 10 Figures 5/6 (drawing code in ..._13082026)
 ```
+
+> **IMPORTANT — regeneration order.** `convert_field_surveys.mjs` rebuilds
+> `field-surveys.geojson` from scratch, which **silently discards two later passes**. Never
+> run it alone; run the whole chain, in this order:
+>
+> ```bash
+> node convert_field_surveys.mjs         # 1. rebuild from KML + workbooks
+> node apply_retained_review.mjs --apply # 2. re-apply retained/removed flags (step 1 reverts them)
+> node compute_field_survey_metrics.mjs  # 3. recompute displacement/areaStats against those flags
+> node tag_corridors.mjs                 # 4. re-add the `corridor` property (step 1 drops it)
+> ```
+>
+> Steps 2 and 4 are additive and idempotent, so re-running the chain is always safe — but
+> skipping them is not: you lose the review flags and the corridor tags with no error. The
+> flags are only provisional this way; when they are signed off for good, write them into
+> each workbook's `RetainedRemoved` sheet so step 1 produces them directly and step 2 becomes
+> a no-op. To verify a regeneration changed nothing, diff the result against `git show
+> HEAD:app/static/data/wgs84/field-surveys.geojson` — feature properties plus the
+> `areaStats` / `displacement` / `zoneProfiles` blocks.
 
 > **IMPORTANT — preview workflow:** the user reviews the static `app/build/` via
 > `npm run preview` (port 5173), not the vite dev server. After editing anything under
@@ -90,12 +119,14 @@ dashboard numbers) produced by `compute_field_survey_metrics.mjs`.
 ```
 raw KML/KMZ/XLSX (Field Surveys/, Parking New Design/)
    │  convert_field_surveys.mjs        (extracts "(Zone NN)" survey paths, tags each with an area)
+   │  apply_retained_review.mjs --apply (re-applies the review workbook's retained/removed flags)
    │  compute_field_survey_metrics.mjs (joins license-plate occupancy logs → occupancy/turnover/areaStats)
+   │  tag_corridors.mjs                (geometric corridor membership → `corridor` on every supply file)
    ▼
 app/static/data/wgs84/*.geojson  ── served by the app AND read by the report scripts
    │  gen_*_report.py / gen_*_figures.py / apply_*_edits.py
    ▼
-Field Surveys/Field Surveys Report/*.docx
+Field Surveys/Field Surveys Report/*.docx, Final Presentation/*.docx|.pptx
 ```
 
 - Survey paths are identified by a `(Zone NN)` suffix in their KML name and split into
@@ -112,9 +143,34 @@ Field Surveys/Field Surveys Report/*.docx
 
 - Built with `python-docx`; figures with `matplotlib` (`Agg` backend). Paths inside the
   scripts are **absolute Windows paths** (`C:/Users/user/Yerevan-Parking/...`).
-- **`gen_*_change_plan.py`** produces a redline *proposal* for client review; **`apply_*_edits.py`**
+- (June round, now in `archive/scripts/`) **`gen_*_change_plan.py`** produced a redline *proposal* for client review; **`apply_*_edits.py`**
   applies the approved changes into a separate `...(rev).docx`, leaving the source
-  untouched. Additions are red; deletions are red strikethrough. Plan → approve → apply.
+  untouched. Plan → approve → apply. (Additions red, deletions red
+  strikethrough.)
+- **Later revision rounds** (`apply_o8_*.py`, `apply_o10_*.py`, `fix_*.py`, `remove_*.py`)
+  share two modules:
+  - **`docx_edit.py`** — python-docx surgery helpers. New or changed text is red;
+    deletions are simply removed, since each round is re-issued as a new dated file and
+    the previous dated file is the record. `find()` raises on a missing anchor on
+    purpose, so an edit is never skipped silently.
+  - **`report_figures.py`** — derives every number the reports quote from the app's
+    GeoJSON on the "C1+C2 v2" basis. It excludes Corridor 03 (`HIDDEN_CORRIDORS` in
+    `story.js`), Nalbandyan016 and the withdrawn Nalbandyan off-street facility, and
+    asserts against the figures the deck already uses. Quote figures from here, never
+    hard-code them.
+- **Never rebuild a deliverable that has been issued.** Rebuild scripts copy the previous
+  revision and regenerate the output. The user hand-edits the saved `.docx`/`.pptx`, for
+  example recolouring accepted red text to black, so a rebuild would discard that work.
+  The scripts' `_guard_existing()` refuses to overwrite an existing output unless run
+  with `--force`. Put further changes in a targeted script that edits the saved file in
+  place (pattern: `apply_o8_pending_edits.py`).
+- **`archive/scripts/`** holds the one-off revision scripts from earlier rounds (June to
+  25 Aug) and the builders for finished documents (slides, debrief, memos). Each one
+  targets a specific dated file and has already been applied, so read them for
+  precedent but don't run them. They import `docx_edit`/`report_figures` from the repo
+  root, so copy a script back to the root before adapting it. The figure scripts still
+  at the root point `DOC` at the 13/14 Aug (Output 10) and 25 Aug (Output 8) files;
+  retarget `DOC` to the current revision before running one.
 - Known label quirk, do not "fix": **Output 10** = the Parking Analysis (measures) report,
   but its cover internally reads "Output 8: Parking Analysis Report" — a deliberate-to-leave
   client mislabel referenced across the scripts.

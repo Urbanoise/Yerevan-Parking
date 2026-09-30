@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-	<title>Yerevan Parking Supply</title>
+	<title>Yerevan Parking Assessment</title>
 	<meta name="description" content="Interactive map of parking supply across Yerevan, Armenia" />
 </svelte:head>
 

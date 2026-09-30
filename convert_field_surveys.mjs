@@ -5,8 +5,8 @@ import XLSX from 'xlsx';
 // the Field Surveys KML. The survey now spans five areas:
 //   • Malatia-Sebastia — zones 2–24    (Malatia Sebastia - Analysis; Sebastia/Raffi)
 //   • Garegin Nzhdeh   — zones 25–59   (Garegin Nzhdeh St - Analysis)
-//   • Gai Avenue       — zones 60–69   (Mega Mall - Analysis)
-//   • Komitas          — zones 70–122  (Parking Survey Sheet v5)
+//   • Gai Avenue       — zones 60–69   (Gai Avenue - Analysis)
+//   • Komitas          — zones 70–122  (Komitas - Analysis)
 //   • Shiraz/Hasratyan — zones 123–156 (Shiraz, Hasratyan - Analysis)
 // Each path is tagged with an `area` so the Field Surveys story step can resolve
 // per-area dashboard numbers as the reader zooms between the neighbourhoods.
@@ -64,12 +64,12 @@ const EXCLUDED_ZONES = new Set([40]);
 // A zone with no entry — or an area whose workbook lacks the sheet — defaults to
 // retained.
 const RETAINED_SOURCES = {
-	malatia: 'Field Surveys/Malatia Sebastia - Analysis.xlsx',
-	kentron: 'Field Surveys/Kentron - Analysis.xlsx',
-	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis.xlsx',
-	mega: 'Field Surveys/Mega Mall - Analysis.xlsx',
-	komitas: 'Field Surveys/Parking Survey Sheet v5.xlsx',
-	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis.xlsx',
+	malatia: 'Field Surveys/Malatia Sebastia - Analysis (corrected 24082026).xlsx',
+	kentron: 'Field Surveys/Kentron - Analysis (corrected 24082026).xlsx',
+	garegin: 'Field Surveys/Garegin Nzhdeh St - Analysis (corrected 24082026).xlsx',
+	mega: 'Field Surveys/Gai Avenue - Analysis (corrected 24082026).xlsx',
+	komitas: 'Field Surveys/Komitas - Analysis (corrected 24082026).xlsx',
+	shiraz: 'Field Surveys/Shiraz, Hasratyan - Analysis (corrected 24082026).xlsx',
 };
 const retainedByArea = {};
 for (const [area, file] of Object.entries(RETAINED_SOURCES)) {
@@ -196,7 +196,8 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 // workbook's off-street occupancy log keys to it in compute_field_survey_metrics.mjs.
 //   • ShirazYard010   — Shiraz/Hasratyan (71 spaces, capacity from KML)
 //   • GNOFF           — Garegin Nzhdeh off-street (40 spaces)
-//   • Palace          — Gai Avenue, the "P" off-street log (32 spaces)
+//   • Palace          — Gai Avenue, the "P" off-street log (62 spaces; was 32, an area
+//                       estimate - the survey found 62 cars there at 16:00, Sep 2026)
 //   • SebastiaYard006 — Malatia-Sebastia, the "Off-street" log (101 spaces, KML capacity)
 // `match` is the exact KML placemark name; `space` overrides any KML capacity so the
 // figures stay aligned with the survey team's agreed lot sizes. Note SebastiaYard006
@@ -205,7 +206,7 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 const KML_YARDS = [
 	{ name: 'ShirazYard010', area: 'shiraz', match: 'ShirazYard010', space: 71 },
 	{ name: 'GNOFF', area: 'garegin', match: 'GNOFF', space: 40 },
-	{ name: 'Palace', area: 'mega', match: 'Palace', space: 32 },
+	{ name: 'Palace', area: 'mega', match: 'Palace', space: 62 },
 	{ name: 'SebastiaYard006', area: 'malatia', match: 'SebastiaYard006', space: 101 },
 	{ name: 'NalbandyanYard001', area: 'kentron', match: 'NalbandyanYard001', space: 60 },
 ];

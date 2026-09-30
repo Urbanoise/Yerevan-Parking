@@ -27,3 +27,15 @@ _tmp_kmz_*/
 # design, not consumed by the app or any converter — the design reaches the repo as
 # the exported KMZ in Parking New Design/.
 *.dwg
+
+# Step backups written by the apply_*/fix_* report scripts before each in-place edit
+# (the "(pre-<something>)" suffix). They exist so a bad edit can be reverted within a
+# session; once the revision itself is committed, git history serves that purpose.
+# Kept on disk, out of the repo — binary .docx do not delta-compress.
+*(pre-*).docx
+
+# Superseded report revisions the user has set aside by hand.
+Final Presentation/Trash/
+
+# raw app screenshots for the Output 8 maps (regenerate with capture_o8_app_maps.py)
+Final Presentation/SEP'26/O8 app maps/raw/

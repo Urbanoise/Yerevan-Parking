@@ -468,7 +468,7 @@ export const FIELD_SURVEYS_HIT = {
 
 // Off-street yards shown alongside the Field Surveys paths — one per area:
 // KomitasCity (123), ShirazYard010 (71), GNOFF (40, Garegin Nzhdeh) and Palace
-// (32, Gai Avenue). Geometry, capacity and measured occupancy come from the
+// (62, Gai Avenue). Geometry, capacity and measured occupancy come from the
 // dedicated field-survey-yards.geojson (built by convert/compute). Uses the same
 // purple as off-street areas in the Parking Regulation step (#7c4dff).
 export const FIELD_SURVEY_YARD_FILL = {

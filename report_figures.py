@@ -387,7 +387,9 @@ def survey():
             "label": label, "date": date, "weekday": weekday, "zones": zones,
             "paths": len(feats),
             "spaces": sum(p.get("space") or 0 for p in feats),
-            "peak_pct": occ["Peak Occupancy % (cap-weighted)"],
+            # The app's first tile, since 30 Sep 2026 on the busiest-hour basis; must
+            # equal peak_hour_pct below (asserted in survey()).
+            "peak_pct": occ["Busiest-Hour Occupancy %"],
             # Area-wide peak hour: the most vehicles standing in the area at ONE clock
             # hour, over capacity. The cap-weighted figure above instead sums each
             # zone's own busiest hour, which double-counts across hours and is what the
@@ -397,7 +399,7 @@ def survey():
                          sum(p["space"] for p in feats
                              if p.get("peak_occupancy") is not None and p.get("space"))),
             "over85_pct": occ["% Zones Over 85% (Peak)"],
-            "over_capacity": occ["Zones Over Capacity"],
+            "over_capacity": occ["Zones Over Capacity (Peak)"],
             "retained": ret["Retained Spaces"],
             "removed": ret["Removed Spaces"],
             "retained_pct": ret["% Spaces Retained"],
@@ -424,7 +426,7 @@ def survey():
     allb = {lens: block("all", lens) for lens in ("occupancy", "retained", "displacement")}
     dur = stats["all"]["profile"]["duration"]
     out["all"] = {
-        "peak_pct": allb["occupancy"]["Peak Occupancy % (cap-weighted)"],
+        "peak_pct": allb["occupancy"]["Busiest-Hour Occupancy %"],
         "peak_hour_cars": sum(a["peak_hour_cars"] for a in out["areas"].values()),
         "peak_hour_pct": round(100.0 * sum(a["peak_hour_cars"] for a in out["areas"].values())
                                / sum(f["properties"]["space"] for f in doc["features"]
@@ -432,7 +434,7 @@ def survey():
                                      and f["properties"].get("space"))),
         "peak_hour": None,   # the six areas peak at different hours; see per-area figures
         "over85_pct": allb["occupancy"]["% Zones Over 85% (Peak)"],
-        "over_capacity": allb["occupancy"]["Zones Over Capacity"],
+        "over_capacity": allb["occupancy"]["Zones Over Capacity (Peak)"],
         "removed": disp["removed_supply"],
         "displaced": disp["removed_demand"],
         "displaced_pct": pct(disp["removed_demand"], disp["removed_supply"], 0),
@@ -475,8 +477,11 @@ def survey():
     # 60 since the 24 Aug worksheet repair: displaced demand 1,120 -> 1,123 against
     # the same 1,886 spaces removed, so the share rounds up from 59%.
     assert out["all"]["displaced_pct"] == 60, out["all"]["displaced_pct"]
-    # 92 since the 24 Aug worksheet repair (was 93; three zone-hours corrected).
-    assert out["all"]["peak_pct"] == 92, out["all"]["peak_pct"]
+    # 61 since 30 Sep 2026: the app tile moved from summed zone peaks (92) to the
+    # busiest clock hour, the basis the reports publish. App and reports must agree.
+    assert out["all"]["peak_pct"] == out["all"]["peak_hour_pct"] == 61, out["all"]
+    for a, r in out["areas"].items():
+        assert r["peak_pct"] == r["peak_hour_pct"], (a, r["peak_pct"], r["peak_hour_pct"])
     return out
 
 

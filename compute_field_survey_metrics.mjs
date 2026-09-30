@@ -215,7 +215,12 @@ function statsForArea(areaKey) {
 
 	return {
 		occupancy: [
-			{ value: capSum ? round((peakSum / capSum) * 100) : 0, label: 'Peak Occupancy % (cap-weighted)', color: '#2ecc71' },
+			// Busiest clock hour: the most vehicles in the area's zones at ONE hour, over
+			// their capacity (for 'all', each area at its own busiest hour). This is the
+			// basis the reports publish (Kentron 89%, all six 61%). The old tile summed
+			// each zone's own peak (peakSum), mixing hours - Kentron read 137% - and was
+			// withdrawn after the 12 Aug ADB review; it is dropped here (30 Sep 2026).
+			{ value: capSum ? round((peakHourDemand(surveyed) / capSum) * 100) : 0, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
 			{ value: surveyed.length ? round((over85 / surveyed.length) * 100) : 0, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
 			{ value: overCap, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 		],

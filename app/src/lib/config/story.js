@@ -316,7 +316,7 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 93, label: 'Peak Occupancy % (cap-weighted)', color: '#2ecc71' },
+					{ value: 61, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
 					{ value: 69, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
 					{ value: 116, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 				],

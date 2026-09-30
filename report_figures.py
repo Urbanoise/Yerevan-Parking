@@ -288,8 +288,9 @@ def _assert_supply(d):
     re-cutting, not that this module should be relaxed."""
     assert (d["on_corridor"], d["on_corridor_segments"]) == (6095, 433), d["on_corridor"]
     assert (d["on_street"], d["on_street_segments"]) == (7825, 606), d["on_street"]
-    assert (d["off_street"], d["off_street_facilities"]) == (6732, 239), d["off_street"]
-    assert d["total"] == 14557, d["total"]
+    # Palace lot 32 -> 62 (30 Sep 2026): area estimate replaced by the 62 cars observed
+    assert (d["off_street"], d["off_street_facilities"]) == (6762, 239), d["off_street"]
+    assert d["total"] == 14587, d["total"]
     assert (d["removed"], d["retained"]) == (4875, 1220), (d["removed"], d["retained"])
     assert d["cross_street"] == d["on_street"] - d["on_corridor"] == 1730
     z = d["zones"]
@@ -509,7 +510,7 @@ def yards():
     out["at_or_over_capacity"] = sorted(
         (a for a, r in rows.items() if r["peak_pct"] >= 100),
         key=lambda a: -rows[a]["peak_pct"])
-    assert total == 427, total
+    assert total == 457, total  # Palace 32 -> 62, 30 Sep 2026
     return out
 
 

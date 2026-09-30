@@ -196,7 +196,8 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 // workbook's off-street occupancy log keys to it in compute_field_survey_metrics.mjs.
 //   • ShirazYard010   — Shiraz/Hasratyan (71 spaces, capacity from KML)
 //   • GNOFF           — Garegin Nzhdeh off-street (40 spaces)
-//   • Palace          — Gai Avenue, the "P" off-street log (32 spaces)
+//   • Palace          — Gai Avenue, the "P" off-street log (62 spaces; was 32, an area
+//                       estimate - the survey found 62 cars there at 16:00, Sep 2026)
 //   • SebastiaYard006 — Malatia-Sebastia, the "Off-street" log (101 spaces, KML capacity)
 // `match` is the exact KML placemark name; `space` overrides any KML capacity so the
 // figures stay aligned with the survey team's agreed lot sizes. Note SebastiaYard006
@@ -205,7 +206,7 @@ const placemarkMatches = [...kml.matchAll(/<Placemark[^>]*>([\s\S]*?)<\/Placemar
 const KML_YARDS = [
 	{ name: 'ShirazYard010', area: 'shiraz', match: 'ShirazYard010', space: 71 },
 	{ name: 'GNOFF', area: 'garegin', match: 'GNOFF', space: 40 },
-	{ name: 'Palace', area: 'mega', match: 'Palace', space: 32 },
+	{ name: 'Palace', area: 'mega', match: 'Palace', space: 62 },
 	{ name: 'SebastiaYard006', area: 'malatia', match: 'SebastiaYard006', space: 101 },
 	{ name: 'NalbandyanYard001', area: 'kentron', match: 'NalbandyanYard001', space: 60 },
 ];

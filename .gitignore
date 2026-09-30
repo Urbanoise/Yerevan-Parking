@@ -36,3 +36,6 @@ _tmp_kmz_*/
 
 # Superseded report revisions the user has set aside by hand.
 Final Presentation/Trash/
+
+# raw app screenshots for the Output 8 maps (regenerate with capture_o8_app_maps.py)
+Final Presentation/SEP'26/O8 app maps/raw/

@@ -1,6 +1,6 @@
 <script>
 	import { onMount, untrack } from 'svelte';
-	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats } from '$lib/stores/mapStore.js';
+	import { mapInstance, dataLoaded, activeFilter, showAreas, showLines, activeLegendFilters, geojsonData, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, fieldSurveyArea, fieldSurveyStats, occupancyBasis } from '$lib/stores/mapStore.js';
 	import { currentStep } from '$lib/stores/storyStore.js';
 	import { ALL_LAYERS, OCCUPANCY_COLOR } from '$lib/layers/layers.js';
 	import { STORY_STEPS, HIDDEN_CORRIDORS } from '$lib/config/story.js';
@@ -29,6 +29,25 @@
 	// 150 m of the area). Set once, reused to make those yellow lines clickable via the
 	// shared parking-lines hit layer.
 	let dispAbsorberFilter = null;
+
+	// Field-survey data on both occupancy bases. The GeoJSON's plain fields carry the
+	// published 'walter' basis and `*_count` twins carry the old one; switching copies
+	// the chosen set into the plain fields, so every layer, popup and stat reads one name.
+	const BASIS_FIELDS = ['peak_occupancy', 'peak_hour', 'occupancy_pct', 'avg_duration_h'];
+	let fsData = null, fsYards = null;
+	let zoneProfiles = {};
+	function applyOccupancyBasis(basis) {
+		if (!fsData) return;
+		for (const f of [...fsData.features, ...(fsYards?.features ?? [])]) {
+			const p = f.properties;
+			p._walter ??= Object.fromEntries(BASIS_FIELDS.map(k => [k, p[k]]));
+			for (const k of BASIS_FIELDS) p[k] = basis === 'count' ? p[k + '_count'] : p._walter[k];
+		}
+		fieldSurveyStats.set((basis === 'count' ? fsData.areaStatsCount : fsData.areaStats) ?? null);
+		zoneProfiles = (basis === 'count' ? fsData.zoneProfilesCount : fsData.zoneProfiles) ?? {};
+		map?.getSource('field-surveys')?.setData(fsData);
+		map?.getSource('field-survey-yards')?.setData(fsYards);
+	}
 
 	function updateFieldSurveyArea() {
 		const s = STORY_STEPS[currentStepIdx];
@@ -430,11 +449,12 @@
 			areasData.features = areasData.features.filter(f => !f.properties.excluded);
 			linesData.features = linesData.features.filter(f => !f.properties.excluded);
 
-			// Per-area dashboard numbers travel inside the field-surveys file.
-			fieldSurveyStats.set(fieldSurveysData.areaStats ?? null);
-			// Per-zone demand profiles (hourly curve + stay split), keyed "area:zone",
-			// for the click popups. Captured here so the popup builder can read them.
-			const zoneProfiles = fieldSurveysData.zoneProfiles ?? {};
+			// Per-area dashboard numbers and per-zone demand profiles (hourly curve + stay
+			// split, keyed "area:zone", for the click popups) travel inside the
+			// field-surveys file; applyOccupancyBasis picks the basis-specific set.
+			fsData = fieldSurveysData;
+			fsYards = fieldYardsData;
+			applyOccupancyBasis(untrack(() => $occupancyBasis));
 
 			// Capacity is resolved upstream by normalize_offstreet_capacity.mjs, which owns
 			// the description-format quirks and the agreed per-facility overrides. Read the
@@ -608,7 +628,7 @@
 						<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:4px;background:rgba(255,255,255,0.08)">
 							<div style="width:${sp}%;background:#00e5ff"></div><div style="width:${ep}%;background:#ffd60a"></div><div style="width:${wp}%;background:#ff9f1c"></div><div style="width:${ap}%;background:#ff6b6b"></div>
 						</div>
-						<div style="font-size:9px;opacity:0.6;margin-top:4px">≤1h ${sp}% · 2–4h ${ep}% · 5–8h ${wp}% · &gt;8h ${ap}%</div>`;
+						<div style="font-size:9px;opacity:0.6;margin-top:4px">≤1h ${sp}% · 1–4h ${ep}% · 4–8h ${wp}% · &gt;8h ${ap}%</div>`;
 				}
 				return html;
 			}
@@ -803,6 +823,12 @@
 			// Keep the camera where the reader left it (locked into a survey location).
 			applyStepVisibility($currentStep, false);
 		}
+	});
+
+	// Occupancy basis switch (Field Surveys step).
+	$effect(() => {
+		const basis = $occupancyBasis;
+		if (map && $dataLoaded) untrack(() => applyOccupancyBasis(basis));
 	});
 
 	// Top-lot marker visibility — depends on the active step, the slider value,

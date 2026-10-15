@@ -244,7 +244,8 @@ export const STORY_STEPS = [
 		// Retained figures come from the 23 Jul 2026 conceptual design, v2 export
 		// (Parking New Design/New Design Parking 23072026 v2.kmz → new-design-parking.geojson),
 		// reconciled by convert_new_design.mjs to the signed-off totals in
-		// Final Presentation/Retention Numbers.xlsx.
+		// Final Presentation/Retention Numbers.xlsx, plus Bagratuniats N03–N06 on
+		// Corridor 01 (32 spaces, v3 KMZ of 15 Oct 2026): 869 → 901.
 		// C1+C2 only. Corridor 03 is withheld (HIDDEN_CORRIDORS) pending its design, and
 		// its 896 fully-retained spaces are out of both sides of the comparison — with it
 		// included the retention rate reads 30% instead of 20%.
@@ -266,13 +267,13 @@ export const STORY_STEPS = [
 			{ id: 'new-c2', label: 'Corridor 02', color: '#0288D1' },
 		],
 		stats: [
-			{ value: 1220, label: 'Total Retained', color: '#4CAF50' },
-			{ value: 869, label: 'Corridor 01', color: '#F9A825' },
+			{ value: 1252, label: 'Total Retained', color: '#4CAF50' },
+			{ value: 901, label: 'Corridor 01', color: '#F9A825' },
 			{ value: 351, label: 'Corridor 02', color: '#0288D1' },
 		],
 		// `current` is on-corridor supply for C1+C2 only (2,349 + 3,746), excluding both
 		// Corridor 03 and the out-of-boundary Nalbandyan016 segment.
-		comparison: { current: 6095, retained: 1220 },
+		comparison: { current: 6095, retained: 1252 },
 	},
 	{
 		index: 9,
@@ -304,10 +305,12 @@ export const STORY_STEPS = [
 		fieldModes: [
 			{
 				id: 'occupancy',
-				label: 'Avg Occupancy',
+				label: 'Daily Avg Occupancy',
 				colorMode: 'field-occupancy',
+				// The map colours each zone by its all-day AVERAGE; the panel figures are
+				// read at the busiest hour. The key says so (ADB memo of 7 Oct 2026, Gai).
 				staticKey: {
-					title: 'Daily avg occupancy (% of capacity)',
+					title: 'Map: all-day average occupancy (% of capacity) · panel: busiest hour',
 					items: [
 						{ label: '≤85% — within capacity', color: '#2ecc71' },
 						{ label: '86–100% — at capacity', color: '#ff8a8a' },
@@ -316,9 +319,9 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 61, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
-					{ value: 69, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
-					{ value: 116, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
+					{ value: 36, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
+					{ value: 34, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
+					{ value: 44, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 				],
 			},
 			{
@@ -339,11 +342,11 @@ export const STORY_STEPS = [
 					],
 				},
 				stats: [
-					{ value: 1120, label: 'Cars Displaced (Peak Hour)', color: '#EF5350' },
+					{ value: 673, label: 'Cars Displaced (Peak Hour)', color: '#EF5350' },
 					{ value: 1886, label: 'Spaces Removed', color: '#b0455a' },
 					{ value: 391, label: 'Nearby On-Street', color: '#ffd60a' },
 					{ value: 1935, label: 'Nearby Off-Street', color: '#7c4dff' },
-					{ value: 35, label: '% Absorbed On-Street', color: '#ffd60a' },
+					{ value: 58, label: '% Absorbed On-Street', color: '#ffd60a' },
 					{ value: 100, label: '% Absorbed Total', color: '#00e5ff' },
 				],
 			},

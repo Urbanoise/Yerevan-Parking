@@ -364,3 +364,63 @@ def add_table_after(doc, par, rows, style="Table Grid", widths=None, red=True):
                 for r in p.runs:
                     r.font.size = Pt(8.5)
     return table
+
+
+# ---------------------------------------------------------------------------
+# starting a new revision round from a reviewed copy
+# ---------------------------------------------------------------------------
+def accept_red(doc):
+    """Recolour the previous round's red text to automatic (black), so the new round's
+    red marks only what changed in it. The user does the same by hand once a round is
+    accepted; here the reviewer has said every earlier point is resolved."""
+    n = 0
+    for col in list(doc.element.body.iter(qn("w:color"))):
+        if col.get(qn("w:val"), "").upper() in ("C00000", "FF0000"):
+            col.getparent().remove(col)
+            n += 1
+    return n
+
+
+def strip_comments(doc):
+    """Remove every comment anchor and reference from the body and drop the comment
+    parts, for a clean copy once the comment threads are closed."""
+    body = doc.element.body
+    n = 0
+    for tag in ("w:commentRangeStart", "w:commentRangeEnd"):
+        for el in list(body.iter(qn(tag))):
+            el.getparent().remove(el)
+    for ref in list(body.iter(qn("w:commentReference"))):
+        run = ref.getparent()
+        run.getparent().remove(run)
+        n += 1
+    for rid, rel in list(doc.part.rels.items()):
+        if "comments" in rel.reltype.lower():
+            doc.part.drop_rel(rid)
+    return n
+
+
+def swap_figure_above(doc, caption_needle, image_path):
+    """Replace the picture sitting just above the Caption paragraph containing
+    `caption_needle`, keeping its width and correcting the height for the new aspect
+    ratio. The new image is re-encoded to the existing part's format (a JPEG behind a
+    .png part name is a corrupt file to Word)."""
+    import io
+    from PIL import Image
+    paras = doc.paragraphs
+    cap_i = next(i for i, p in enumerate(paras)
+                 if caption_needle in p.text and p.style.name == "Caption")
+    pic = next(paras[j] for j in range(cap_i - 1, max(cap_i - 8, -1), -1)
+               if paras[j]._p.findall(".//" + qn("a:blip")))
+    rid = pic._p.findall(".//" + qn("a:blip"))[0].get(qn("r:embed"))
+    part = doc.part.related_parts[rid]
+    img = Image.open(image_path)
+    fmt = "JPEG" if str(part.partname).lower().endswith((".jpg", ".jpeg")) else "PNG"
+    buf = io.BytesIO()
+    (img.convert("RGB") if fmt == "JPEG" else img).save(buf, fmt, quality=90)
+    part._blob = buf.getvalue()
+    nw, nh = img.size
+    for ext in list(pic._p.iter(qn("wp:extent"))) + list(pic._p.iter(qn("a:ext"))):
+        cx = ext.get("cx")
+        if cx:
+            ext.set("cy", str(int(int(cx) * nh / nw)))
+    return pic

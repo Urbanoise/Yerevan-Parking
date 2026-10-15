@@ -225,7 +225,7 @@
 				<div class="profile">
 					<div class="profile-head">
 						<span class="profile-title">Hourly occupancy</span>
-						{#if vapPeakHour != null}<span class="profile-sub">peaks {vapPeakHour}:00 · {vapMax.toLocaleString()} cars</span>{/if}
+						{#if vapPeakHour != null}<span class="profile-sub">peaks {vapPeakHour}:00 · {Math.round(vapMax).toLocaleString()} cars</span>{/if}
 					</div>
 					<div class="vap-chart">
 						{#each profile.vap as point}
@@ -256,8 +256,8 @@
 					</div>
 					<div class="stay-legend">
 						<span><i class="stay-short"></i>≤1h short visit · {profile.duration.shortPct}%</span>
-						<span><i class="stay-errand"></i>2–4h errand · {profile.duration.errandPct}%</span>
-						<span><i class="stay-worker"></i>5–8h worker · {profile.duration.workerPct}%</span>
+						<span><i class="stay-errand"></i>1–4h errand · {profile.duration.errandPct}%</span>
+						<span><i class="stay-worker"></i>4–8h worker · {profile.duration.workerPct}%</span>
 						<span><i class="stay-allday"></i>&gt;8h all-day · {profile.duration.alldayPct}%</span>
 					</div>
 				</div>

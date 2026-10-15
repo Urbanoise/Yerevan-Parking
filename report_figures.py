@@ -44,10 +44,12 @@ OFFSTREET_WITHDRAWN = {"NalbandyanPavstocByuzand"}
 # Design lengths, from the conceptual design rather than from the parking data.
 CORRIDOR_KM = {"Corridor 01": 11.66, "Corridor 02": 19.19}
 
-# Retention per corridor, from the v2 conceptual design (Retention Numbers.xlsx).
+# Retention per corridor, from the v2 conceptual design (Retention Numbers.xlsx), plus
+# Bagratuniats N03-N06 on Corridor 1 (32 spaces, added 15 Oct 2026 after the ADB memo
+# of 7 Oct: unmarked kerb the v2 drawings leave for parking).
 # The existing base is derived, not typed, so the removal line cannot drift out of
 # step with the inventory the way the 22 Jul deck's did.
-RETAINED = {"Corridor 01": 869, "Corridor 02": 351}
+RETAINED = {"Corridor 01": 901, "Corridor 02": 351}
 
 # Source-data spelling variants. The surveyors' segment names carry a handful of
 # typos; folding them in is what lets the per-street tables sum exactly to their
@@ -291,7 +293,7 @@ def _assert_supply(d):
     # Palace lot 32 -> 62 (30 Sep 2026): area estimate replaced by the 62 cars observed
     assert (d["off_street"], d["off_street_facilities"]) == (6762, 239), d["off_street"]
     assert d["total"] == 14587, d["total"]
-    assert (d["removed"], d["retained"]) == (4875, 1220), (d["removed"], d["retained"])
+    assert (d["removed"], d["retained"]) == (4843, 1252), (d["removed"], d["retained"])
     assert d["cross_street"] == d["on_street"] - d["on_corridor"] == 1730
     z = d["zones"]
     assert z["free"] + z["zone_b"] + z["zone_a"] + z["taxi"] == d["on_corridor"]
@@ -339,13 +341,14 @@ def _turnover(feats, road_edge_only=False):
 def _peak_hour(vap, capacity):
     """Area-wide occupancy at the single busiest clock hour.
 
-    `vap` is the hourly curve of distinct vehicles observed; its maximum is the number
-    that used the area's kerb during its busiest clock hour. It is the same kind of
-    count as the zone-level figure - vehicles that used the kerb during the hour, not a
-    snapshot of simultaneous presence - taken at one hour shared across the area rather
-    than at each zone's own peak. It therefore is NOT bounded by 100%; that no area
-    exceeds it in this survey is a result, not a property of the measure. Returns the
-    share, the count and the hour it falls in.
+    `vap` is the hourly curve of vehicles present. Since 15 Oct 2026 it is on the ADB
+    reviewer's basis (compute_field_survey_metrics.mjs, 'walter'): a vehicle counts
+    half an hour in the hour it arrives and the hour it leaves and a full hour for each
+    hour between, so the curve estimates average vehicles parked during each hour. Its
+    maximum is taken at one clock hour shared across the area rather than at each
+    zone's own peak. It is still not bounded by 100% - single zones exceed it where
+    more vehicles park than the formal capacity. Returns the share, the count and the
+    hour it falls in.
     """
     if not vap or not capacity:
         return {"peak_hour_pct": None, "peak_hour": None, "peak_hour_cars": None}
@@ -474,12 +477,15 @@ def survey():
             c[p.get(key)] += p.get("space") or 0
         out["supply_typology"][key] = dict(c)
 
-    # 60 since the 24 Aug worksheet repair: displaced demand 1,120 -> 1,123 against
-    # the same 1,886 spaces removed, so the share rounds up from 59%.
-    assert out["all"]["displaced_pct"] == 60, out["all"]["displaced_pct"]
-    # 61 since 30 Sep 2026: the app tile moved from summed zone peaks (92) to the
-    # busiest clock hour, the basis the reports publish. App and reports must agree.
-    assert out["all"]["peak_pct"] == out["all"]["peak_hour_pct"] == 61, out["all"]
+    # 15 Oct 2026, ADB reviewer's occupancy basis ('walter'): displaced demand 673 of
+    # 1,834 spaces removed (37%; it was 1,123 = 60% when each sighting counted a full
+    # hour), and all six areas 36% at their busiest hour (was 61%). Removed was 1,886
+    # until the five unswept Kentron zones (52 spaces) left the survey layer, same day.
+    assert out["all"]["displaced"] == 673, out["all"]["displaced"]
+    assert out["all"]["removed"] == 1834, out["all"]["removed"]
+    assert out["all"]["displaced_pct"] == 37, out["all"]["displaced_pct"]
+    # App tile and reports must agree.
+    assert out["all"]["peak_pct"] == out["all"]["peak_hour_pct"] == 36, out["all"]
     for a, r in out["areas"].items():
         assert r["peak_pct"] == r["peak_hour_pct"], (a, r["peak_pct"], r["peak_hour_pct"])
     return out
@@ -489,7 +495,8 @@ def survey():
 def yards():
     """The six surveyed off-street facilities. `peak_occupancy` in the GeoJSON is a
     vehicle COUNT, not a percentage, so the peak share is derived here rather than
-    read — quoting the raw field as a percentage is an easy mistake to make."""
+    read — quoting the raw field as a percentage is an easy mistake to make. Both are
+    on the reviewer's basis since 15 Oct 2026 (Nalbandyan peak 142% -> 92%)."""
     path = os.path.join(WGS, "field-survey-yards.geojson")
     label = {v: k for k, v in {
         "kentron": "NalbandyanYard001", "komitas": "KomitasCity", "garegin": "GNOFF",

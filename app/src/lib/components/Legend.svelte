@@ -1,6 +1,6 @@
 <script>
 	import { currentStep } from '$lib/stores/storyStore.js';
-	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained } from '$lib/stores/mapStore.js';
+	import { activeLegendFilters, topLotsCount, topLotsCategories, showCurrentParking, showSensitivityZones, fieldSurveyMode, fieldSurveyRetained, occupancyBasis } from '$lib/stores/mapStore.js';
 	import { STORY_STEPS } from '$lib/config/story.js';
 
 	let stepConfig = $derived(STORY_STEPS[$currentStep] || {});
@@ -111,6 +111,21 @@
 						aria-pressed={$fieldSurveyMode === mode.id}
 					>{mode.label}</button>
 				{/each}
+			</div>
+			<div class="legend-title">Occupancy method</div>
+			<div class="mode-toggle" title="How each hourly sighting is credited">
+				<button
+					class="mode-btn"
+					class:active={$occupancyBasis === 'walter'}
+					onclick={() => occupancyBasis.set('walter')}
+					aria-pressed={$occupancyBasis === 'walter'}
+				>Half-hour Method</button>
+				<button
+					class="mode-btn"
+					class:active={$occupancyBasis === 'count'}
+					onclick={() => occupancyBasis.set('count')}
+					aria-pressed={$occupancyBasis === 'count'}
+				>Old Method</button>
 			</div>
 			{#if switchMode}
 				<button

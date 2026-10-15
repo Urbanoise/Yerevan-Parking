@@ -112,37 +112,99 @@ function parseUnitedData(file, offLabel) {
 	};
 }
 
+// --- Two occupancy bases (15 Oct 2026) ---
+// The survey records which plates were in a zone at each hourly sweep, not how long
+// within the hour each one stood there. Two ways of turning that into occupancy:
+//   • 'walter' (PUBLISHED, primary fields) — the ADB reviewer's method (memo of 7 Oct
+//     2026, after W. Hook): a vehicle is credited half an hour in the hour it arrives
+//     and half an hour in the hour it leaves, and a full hour for every hour between,
+//     on the assumption that on average it stood half of its first and last hour. A
+//     vehicle seen in one sweep only gets half an hour. Applied per parking event (a
+//     contiguous run of sightings). The survey window's own edges are exempt: a car
+//     already there at the first sweep (07:00) arrived before the window, and one still
+//     there at the last sweep left after it, so those hours count in full.
+//   • 'count' (the 30 Sep 2026 basis, kept for the web app's comparison switch) — each
+//     sighting counts one vehicle for the whole hour.
+// Every time-based measure follows the basis: occupancy, busiest hour, the hourly
+// profile, stay length and displaced demand. Turnover (parking events per space) and
+// distinct vehicles are counts of events and plates, so they are the same under both.
+const BASES = ['walter', 'count'];
+
+function hourWeights(hours, firstHour, lastHour, basis) {
+	const hs = [...hours].sort((a, b) => a - b);
+	const w = new Map();
+	if (basis === 'count') { for (const h of hs) w.set(h, 1); return w; }
+	let run = [hs[0]];
+	const flush = () => run.forEach((h, i) => {
+		const arrives = i === 0 && h !== firstHour;
+		const leaves = i === run.length - 1 && h !== lastHour;
+		w.set(h, arrives || leaves ? 0.5 : 1);
+	});
+	for (let i = 1; i < hs.length; i++) {
+		if (hs[i] - hs[i - 1] > 1) { flush(); run = [hs[i]]; } else run.push(hs[i]);
+	}
+	flush();
+	return w;
+}
+
+// Per basis, per key: hour → vehicles present (load) and plate → hours parked (stay).
+function addLoads(src) {
+	src.load = {}; src.stay = {};
+	for (const b of BASES) {
+		const load = (src.load[b] = new Map()), stay = (src.stay[b] = new Map());
+		for (const [key, plates] of src.plateHours) {
+			// seed hours in log order, so ties for a zone's peak hour resolve as before
+			const lk = new Map([...src.hourPlates.get(key).keys()].map(h => [h, 0])), sk = new Map();
+			for (const [plate, hours] of plates) {
+				let s = 0;
+				for (const [h, v] of hourWeights(hours, src.firstHour, src.lastHour, b)) {
+					lk.set(h, (lk.get(h) || 0) + v); s += v;
+				}
+				sk.set(plate, s);
+			}
+			load.set(key, lk); stay.set(key, sk);
+		}
+	}
+}
+
 const sources = {};
-for (const s of SOURCES) sources[s.area] = { ...s, ...parseUnitedData(s.file, s.offLabel) };
+for (const s of SOURCES) {
+	sources[s.area] = { ...s, ...parseUnitedData(s.file, s.offLabel) };
+	addLoads(sources[s.area]);
+}
 
 // Compute the occupancy/turnover/duration metrics for one survey key (zone number
-// or yard label) against a given formal capacity, using its source's window.
+// or yard label) against a given formal capacity, using its source's window. The
+// time-based fields come back for both bases: plain names = 'walter', `_count` = old.
 function metricsFor(src, key, cap) {
 	const ph = src.plateHours.get(key);
 	if (!ph) return null;
-	let events = 0, durationSum = 0;
-	for (const hours of ph.values()) { events += countEvents(hours); durationSum += hours.size; }
-	let peak = 0, peakHour = null;
-	for (const [hour, plates] of src.hourPlates.get(key)) {
-		if (plates.size > peak) { peak = plates.size; peakHour = hour; }
-	}
+	let events = 0;
+	for (const hours of ph.values()) events += countEvents(hours);
 	const o = src.obs.get(key);
-	// Average occupancy = mean vehicles present across the window, as a share of
-	// legal (striped) capacity. durationSum is total vehicle-hours; ÷ window gives
-	// average vehicles present, ÷ capacity the occupancy. >100% = chronic overflow.
-	const avgPresent = durationSum / src.window;
-	return {
+	const out = {
 		unique_vehicles: ph.size,
 		parking_events: events,
-		peak_occupancy: peak,
-		peak_hour: peakHour,
-		occupancy_pct: cap ? round((avgPresent / cap) * 100) : null,
 		turnover: cap ? round(events / cap, 1) : null,
-		avg_duration_h: round(durationSum / ph.size, 1),
 		illegal_share: round((o.illegal / o.total) * 100, 1),
 		offstreet_share: round((o.offstreet / o.total) * 100, 1),
 		_obs: o,
 	};
+	for (const b of BASES) {
+		const sfx = b === 'walter' ? '' : '_count';
+		let peak = 0, peakHour = null, vehHours = 0;
+		for (const [hour, v] of src.load[b].get(key)) {
+			vehHours += v;
+			if (v > peak) { peak = v; peakHour = hour; }
+		}
+		// Average occupancy = mean vehicles present across the window, as a share of
+		// legal (striped) capacity: vehicle-hours ÷ window ÷ capacity.
+		out['peak_occupancy' + sfx] = round(peak, 1);
+		out['peak_hour' + sfx] = peakHour;
+		out['occupancy_pct' + sfx] = cap ? round((vehHours / src.window / cap) * 100) : null;
+		out['avg_duration_h' + sfx] = round(vehHours / ph.size, 1);
+	}
+	return out;
 }
 
 // --- Stamp the on-street survey paths ---
@@ -157,6 +219,17 @@ for (const f of geojson.features) {
 	delete m._obs;
 	Object.assign(f.properties, m);
 }
+// Zones drawn for supply but never swept for occupancy (Kentron K02–K05 and K18, 52
+// spaces) are dropped from the survey layer, so every survey-area figure — supply,
+// retained/removed and occupancy — rests on the same 203 zones / 2,878 spaces. Decided
+// 15 Oct 2026. Their spaces stay in the corridor supply (parking-lines.geojson).
+// They are parked in `unsweptPaths` (ignored by the app and the stats) rather than
+// deleted, so re-running this script alone still sees them, and `drawnPaths` keeps them
+// for the absorber geometry below: parking on those streets is still the removed
+// parking, not spare capacity.
+const drawnPaths = [...geojson.features, ...(geojson.unsweptPaths || [])];
+geojson.unsweptPaths = drawnPaths.filter(f => f.properties.unique_vehicles == null);
+geojson.features = geojson.features.filter(f => f.properties.unique_vehicles != null);
 
 // --- Stamp the off-street yards ---
 const yards = JSON.parse(readFileSync(YARDS_PATH, 'utf8'));
@@ -176,19 +249,19 @@ for (const y of yards.features) yardByArea[y.properties.area] = y.properties;
 // see both neighbourhoods. Labels/colors mirror the Field Surveys story cards.
 const mean = (arr) => (arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0);
 
-function statsForArea(areaKey) {
+function statsForArea(areaKey, basis = 'walter') {
 	const fs = areaKey === 'all'
 		? geojson.features
 		: geojson.features.filter(f => f.properties.area === areaKey);
+	const sfx = basis === 'walter' ? '' : '_count';
 
 	// Surveyed zones with a known formal capacity. We summarise occupancy at the
 	// PEAK hour (the only figure parking policy cares about) and weight by capacity
 	// so a 60-space corridor counts 20× a 3-space stub — unlike a plain mean of
 	// per-zone percentages, which lets tiny empty zones drag the headline down.
 	const surveyed = fs.filter(f => f.properties.peak_occupancy != null && (f.properties.space || 0) > 0);
-	const peakSum = surveyed.reduce((s, f) => s + f.properties.peak_occupancy, 0);
 	const capSum = surveyed.reduce((s, f) => s + f.properties.space, 0);
-	const peakPct = (f) => (f.properties.peak_occupancy / f.properties.space) * 100;
+	const peakPct = (f) => (f.properties['peak_occupancy' + sfx] / f.properties.space) * 100;
 	// 85% is the classic Shoup target: above it, drivers start cruising for a spot.
 	const over85 = surveyed.filter(f => peakPct(f) >= 85).length;
 	const overCap = surveyed.filter(f => peakPct(f) > 100).length;
@@ -216,11 +289,11 @@ function statsForArea(areaKey) {
 	return {
 		occupancy: [
 			// Busiest clock hour: the most vehicles in the area's zones at ONE hour, over
-			// their capacity (for 'all', each area at its own busiest hour). This is the
-			// basis the reports publish (Kentron 89%, all six 61%). The old tile summed
-			// each zone's own peak (peakSum), mixing hours - Kentron read 137% - and was
-			// withdrawn after the 12 Aug ADB review; it is dropped here (30 Sep 2026).
-			{ value: capSum ? round((peakHourDemand(surveyed) / capSum) * 100) : 0, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
+			// their capacity (for 'all', each area at its own busiest hour). Reports publish
+			// it on the 'walter' basis (Kentron 57%, all six 36%); 'count' gave 89% / 61%.
+			// The older tile summed each zone's own peak, mixing hours - Kentron read
+			// 137% - and was withdrawn after the 12 Aug ADB review (30 Sep 2026).
+			{ value: capSum ? round((peakHourDemand(surveyed, basis) / capSum) * 100) : 0, label: 'Busiest-Hour Occupancy %', color: '#2ecc71' },
 			{ value: surveyed.length ? round((over85 / surveyed.length) * 100) : 0, label: '% Zones Over 85% (Peak)', color: '#ffa600' },
 			{ value: overCap, label: 'Zones Over Capacity (Peak)', color: '#ff1f44' },
 		],
@@ -236,7 +309,7 @@ function statsForArea(areaKey) {
 			{ value: totalRetSpaces ? round((retainedSpaces / totalRetSpaces) * 100) : 0, label: '% Spaces Retained', color: '#4CAF50' },
 			{ value: retainedPaths, label: 'Retained Paths', color: '#00e5ff' },
 		],
-		displacement: computeDisplacement(fs.filter(f => f.properties.retained === 'removed')).stats,
+		displacement: computeDisplacement(fs.filter(f => f.properties.retained === 'removed'), basis).stats,
 	};
 }
 
@@ -277,25 +350,26 @@ const leadWord = (n) => (String(n || '').match(/^[A-Za-z]+/) || [''])[0];
 // hour — those peaks fall at different times, so summing them overstates what's ever
 // displaced at once (147 summed vs 93 real). Grouped by area so multiple corridors
 // each contribute their own local peak hour. Reads the hourly presence sets that
-// parseUnitedData already built (sources[area].hourPlates: zone → hour → Set(plates)).
-function peakHourDemand(removedZones) {
+// per-basis hourly loads addLoads built (sources[area].load[basis]: zone → hour → vehicles).
+function peakHourDemand(removedZones, basis = 'walter') {
 	const byArea = {};
 	for (const f of removedZones) (byArea[f.properties.area] ??= []).push(f.properties.zone);
 	let total = 0;
 	for (const [area, zones] of Object.entries(byArea)) {
 		const src = sources[area];
 		if (!src) continue;
+		const load = src.load[basis];
 		const hours = new Set();
-		for (const z of zones) { const zh = src.hourPlates.get(z); if (zh) for (const h of zh.keys()) hours.add(h); }
+		for (const z of zones) { const zh = load.get(z); if (zh) for (const h of zh.keys()) hours.add(h); }
 		let areaMax = 0;
 		for (const h of hours) {
 			let sum = 0;
-			for (const z of zones) sum += src.hourPlates.get(z)?.get(h)?.size || 0;
+			for (const z of zones) sum += load.get(z)?.get(h) || 0;
 			if (sum > areaMax) areaMax = sum;
 		}
 		total += areaMax;
 	}
-	return total;
+	return round(total);
 }
 
 // --- "Is this absorber on a surveyed street, and near the area?" geometry (metres) ---
@@ -326,7 +400,7 @@ function ptBox(p, b) {
 // Survey-path segments + bounding box grouped by area, in metres.
 const surveySegsByArea = {};
 const surveyBoxByArea = {};
-for (const f of geojson.features) {
+for (const f of drawnPaths) {
 	const pts = f.geometry.coordinates.map(toXY);
 	const segs = (surveySegsByArea[f.properties.area] ??= []);
 	for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1], pts[i]]);
@@ -390,9 +464,9 @@ for (const f of areasGeo.features) {
 //   OFF-STREET — the affected area(s)' off-street yard lot(s) → counts.
 // Yellow + off-street are gross capacity (best-case); only these feed Nearby On-Street,
 // Nearby Off-Street and % Cars Absorbed.
-function computeDisplacement(removedZones) {
+function computeDisplacement(removedZones, basis = 'walter') {
 	const removedSupply = sumSpace(removedZones);
-	const removedDemand = peakHourDemand(removedZones);
+	const removedDemand = peakHourDemand(removedZones, basis);
 	const removedAreas = [...new Set(removedZones.map(f => f.properties.area))];
 
 	const retainedSurveyed = geojson.features.filter(f => removedAreas.includes(f.properties.area) && f.properties.retained === 'retained');
@@ -446,24 +520,24 @@ function computeDisplacement(removedZones) {
 	return { stats, raw };
 }
 
-const areaStats = {
-	all: statsForArea('all'),
-	malatia: statsForArea('malatia'),
-	kentron: statsForArea('kentron'),
-	garegin: statsForArea('garegin'),
-	mega: statsForArea('mega'),
-	komitas: statsForArea('komitas'),
-	shiraz: statsForArea('shiraz'),
-};
+const AREA_KEYS = ['all', 'malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz'];
+const areaStatsFor = (basis) => Object.fromEntries(AREA_KEYS.map(k => [k, statsForArea(k, basis)]));
+// Primary blocks are the published 'walter' basis; the *Count twins carry the old
+// sighting-count basis for the web app's comparison switch.
+const areaStats = areaStatsFor('walter');
+const areaStatsCount = areaStatsFor('count');
 geojson.areaStats = areaStats;
-geojson.displacement = computeDisplacement(geojson.features.filter(f => f.properties.retained === 'removed')).raw;
+geojson.areaStatsCount = areaStatsCount;
+const removedAll = geojson.features.filter(f => f.properties.retained === 'removed');
+geojson.displacement = computeDisplacement(removedAll, 'walter').raw;
+geojson.displacementCount = computeDisplacement(removedAll, 'count').raw;
 
 // --- Demand profile (#3 stay-length split + #4 hourly accumulation curve) ---
-// Both read the per-zone presence structures parseUnitedData already built. The
-// hourly VAP is Σ vehicles present each clock-hour; the stay split bins each plate by
-// how many hours it was seen. Four data-driven duration bins (the web app's split):
-//   ≤1h short visit · 2–4h errand/shopper · 5–8h worker · >8h all-day/overnight.
-// The 2–4h vs 5–8h cut separates two behaviours the old "commuter 2–8h" band
+// Both read the per-basis loads and stays addLoads built. The hourly VAP is Σ vehicles
+// present each clock-hour; the stay split bins each plate by its hours parked. Four
+// data-driven duration bins (the web app's split):
+//   ≤1h short visit · 1–4h errand/shopper · 4–8h worker · >8h all-day/overnight.
+// The errand vs worker cut separates two behaviours the old "commuter 2–8h" band
 // conflated (errand turnover vs all-day interception). avg_duration_h is total hours
 // present per vehicle. durationBlock also exposes the legacy three-way split
 // (visitor=short, commuter=errand+worker, long=all-day) so the .docx report
@@ -472,24 +546,30 @@ geojson.displacement = computeDisplacement(geojson.features.filter(f => f.proper
 // Approved 1-hour boundary rule (matches the report): a single-sweep stay seen ONLY
 // in the survey window's first or last hour is most likely an overnight vehicle
 // clipped by the daytime window (07:00–24:00), not a genuine ≤1h visit — so it is
-// reclassified from 'short' into 'allday' (overnight). This lifts the 8h+ band from
-// the raw ~2% to ~7% and trims ≤1h ~68%→~63%. A single-sweep stay in the interior
-// of the window is a real short visit and stays in 'short'.
+// reclassified from 'short' into 'allday' (overnight). On the count basis this lifts
+// the 8h+ band from the raw ~2% to ~7%. A single-sweep stay in the interior of the
+// window is a real short visit and stays in 'short'. The rule applies on both bases.
 // Per-area profiles ride in areaStats (the stats board reads them by viewport area);
 // per-zone profiles go in geojson.zoneProfiles, keyed "area:zone", for click popups.
-function stayBin(hoursSet, firstHour, lastHour) {
-	const dur = hoursSet.size;
-	if (dur < 2) {
+// Stay length follows the occupancy basis: under 'walter' a plate's stay is its
+// credited hours (two consecutive sightings = 1 h, one sighting = 0.5 h), under
+// 'count' the number of sweeps it was seen in. Bins: ≤1 h · >1–4 h · >4–8 h · >8 h.
+function stayBin(hoursSet, dur, firstHour, lastHour) {
+	if (hoursSet.size < 2) {
 		const h = [...hoursSet][0];
-		return (h === firstHour || h === lastHour) ? 'allday' : 'short';
+		if (h === firstHour || h === lastHour) return 'allday';
 	}
-	return dur <= 4 ? 'errand' : dur <= 8 ? 'worker' : 'allday';
+	return dur <= 1 ? 'short' : dur <= 4 ? 'errand' : dur <= 8 ? 'worker' : 'allday';
 }
 
 function durationTotals() { return { short: 0, errand: 0, worker: 0, allday: 0, durSum: 0, n: 0 }; }
-function addStay(t, hoursSet, firstHour, lastHour) {
-	t.durSum += hoursSet.size; t.n++;
-	t[stayBin(hoursSet, firstHour, lastHour)]++;
+function addStay(t, hoursSet, dur, firstHour, lastHour) {
+	t.durSum += dur; t.n++;
+	t[stayBin(hoursSet, dur, firstHour, lastHour)]++;
+}
+function addZoneStays(t, src, zone, basis) {
+	const ph = src.plateHours.get(zone), st = src.stay[basis].get(zone);
+	if (ph) for (const [plate, hours] of ph) addStay(t, hours, st.get(plate), src.firstHour, src.lastHour);
 }
 function durationBlock(t) {
 	const tot = t.short + t.errand + t.worker + t.allday || 1;
@@ -507,8 +587,8 @@ function durationBlock(t) {
 }
 
 // One area's profile: VAP merged by hour across its zones (across all areas for
-// 'all'), duration counts summed. Uses each zone's own source for the hourly sets.
-function areaProfile(areaKey) {
+// 'all'), duration counts summed. Uses each zone's own source for the hourly loads.
+function areaProfile(areaKey, basis) {
 	const feats = areaKey === 'all' ? geojson.features : geojson.features.filter(f => f.properties.area === areaKey);
 	const byArea = {};
 	for (const f of feats) (byArea[f.properties.area] ??= []).push(f.properties.zone);
@@ -518,93 +598,73 @@ function areaProfile(areaKey) {
 		const src = sources[area];
 		if (!src) continue;
 		for (const z of zones) {
-			const hp = src.hourPlates.get(z);
-			if (hp) for (const [h, plates] of hp) vapMap.set(h, (vapMap.get(h) || 0) + plates.size);
-			const ph = src.plateHours.get(z);
-			if (ph) for (const hours of ph.values()) addStay(t, hours, src.firstHour, src.lastHour);
+			const zl = src.load[basis].get(z);
+			if (zl) for (const [h, v] of zl) vapMap.set(h, (vapMap.get(h) || 0) + v);
+			addZoneStays(t, src, z, basis);
 		}
 	}
-	const vap = [...vapMap.entries()].sort((a, b) => a[0] - b[0]);  // [[hour, vehicles], …]
+	const vap = [...vapMap.entries()].sort((a, b) => a[0] - b[0]).map(([h, v]) => [h, round(v, 1)]);  // [[hour, vehicles], …]
 	return { vap, duration: durationBlock(t) };
 }
 
 // One zone's profile, for the click popup.
-function zoneProfile(area, zone) {
+function zoneProfile(area, zone, basis) {
 	const src = sources[area];
 	if (!src) return null;
-	const hp = src.hourPlates.get(zone), ph = src.plateHours.get(zone);
-	if (!hp && !ph) return null;
-	const vap = hp ? [...hp.entries()].sort((a, b) => a[0] - b[0]).map(([h, p]) => [h, p.size]) : [];
+	const zl = src.load[basis].get(zone);
+	if (!zl) return null;
+	const vap = [...zl.entries()].sort((a, b) => a[0] - b[0]).map(([h, v]) => [h, round(v, 1)]);
 	const t = durationTotals();
-	if (ph) for (const hours of ph.values()) addStay(t, hours, src.firstHour, src.lastHour);
+	addZoneStays(t, src, zone, basis);
 	const dur = durationBlock(t);
 	return { vap, stay: { short: dur.short, errand: dur.errand, worker: dur.worker, allday: dur.allday }, avg: dur.avg };
 }
 
-for (const k of Object.keys(areaStats)) areaStats[k].profile = areaProfile(k);
-
-const zoneProfiles = {};
-for (const f of geojson.features) {
-	const p = zoneProfile(f.properties.area, f.properties.zone);
-	if (p) zoneProfiles[`${f.properties.area}:${f.properties.zone}`] = p;
+for (const k of AREA_KEYS) {
+	areaStats[k].profile = areaProfile(k, 'walter');
+	areaStatsCount[k].profile = areaProfile(k, 'count');
 }
+
+const zoneProfilesFor = (basis) => {
+	const out = {};
+	for (const f of geojson.features) {
+		const p = zoneProfile(f.properties.area, f.properties.zone, basis);
+		if (p) out[`${f.properties.area}:${f.properties.zone}`] = p;
+	}
+	return out;
+};
+const zoneProfiles = zoneProfilesFor('walter');
 geojson.zoneProfiles = zoneProfiles;
+geojson.zoneProfilesCount = zoneProfilesFor('count');
 
 writeFileSync(GEOJSON_PATH, JSON.stringify(geojson));
 writeFileSync(YARDS_PATH, JSON.stringify(yards));
 
-// --- Report ---
+// --- Report: both bases side by side, so the switch's effect stays visible ---
 console.log(`Survey paths: ${geojson.features.length}  matched to survey data: ${matched}`);
 if (missing.length) console.log(`No survey rows for zones: ${missing.join(', ')}`);
-for (const area of ['malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz', 'all']) {
-	const o = areaStats[area].occupancy;
-	console.log(`[${area}] peak occ ${o[0].value}%  over-85 ${o[1].value}%  over-cap ${o[2].value}`);
+console.log('Area           | walter (published)                       | count (old basis)');
+for (const area of AREA_KEYS) {
+	const fmt = (st) => {
+		const [p, o85, oc] = st[area].occupancy, d = st[area].profile.duration;
+		return `${String(p.value).padStart(3)}% busiest · ${String(o85.value).padStart(3)}% ≥85 · ${String(oc.value).padStart(3)} >cap · stay ${d.avg}h`;
+	};
+	console.log(`  ${area.padEnd(12)} | ${fmt(areaStats)} | ${fmt(areaStatsCount)}`);
 }
 for (const y of yards.features) {
-	console.log(`Yard ${y.properties.name}: cap ${y.properties.space}  occupancy ${y.properties.occupancy_pct}%  (${y.properties.unique_vehicles} vehicles)`);
+	const p = y.properties;
+	const pk = (k) => (p.space ? Math.round((100 * p[k]) / p.space) : '-');
+	console.log(`Yard ${p.name}: cap ${p.space}  avg ${p.occupancy_pct}% / ${p.occupancy_pct_count}%  peak ${pk('peak_occupancy')}% / ${pk('peak_occupancy_count')}%  (walter / count, ${p.unique_vehicles} vehicles)`);
 }
 console.log(`Windows — komitas: ${sources.komitas.window}h, shiraz: ${sources.shiraz.window}h`);
-
-// --- Basis check: per-zone peaks vs one shared clock hour ---
-// The headline occupancy above sums each zone's OWN busiest hour, which is the right
-// figure for "how hard is this kerb worked" but counts cars that were never present at
-// the same moment. Displacement instead uses a single clock hour (peakHourDemand), the
-// right figure for "how many cars need re-homing at once". Both are legitimate; they are
-// not comparable, and the two sit side by side on the deck's per-area table. Printing
-// them together keeps the gap visible rather than leaving it to be rediscovered.
-console.log('Occupancy basis — sum of per-zone peaks vs single shared hour:');
-let totCap = 0, totSummed = 0, totShared = 0;
-for (const area of ['malatia', 'kentron', 'garegin', 'mega', 'komitas', 'shiraz']) {
-	const zones = geojson.features.filter(f => f.properties.area === area
-		&& f.properties.peak_occupancy != null && (f.properties.space || 0) > 0);
-	const cap = zones.reduce((s, f) => s + f.properties.space, 0);
-	const summed = zones.reduce((s, f) => s + f.properties.peak_occupancy, 0);
-	const shared = peakHourDemand(zones);
-	// which clock hour carries that shared peak — areas do not share one city-wide hour
-	const src = sources[area];
-	let bestHour = null, bestN = -1;
-	if (src) {
-		const hours = new Set();
-		for (const z of zones) { const zh = src.hourPlates.get(z.properties.zone); if (zh) for (const h of zh.keys()) hours.add(h); }
-		for (const h of [...hours].sort((a, b) => a - b)) {
-			let n = 0;
-			for (const z of zones) n += src.hourPlates.get(z.properties.zone)?.get(h)?.size || 0;
-			if (n > bestN) { bestN = n; bestHour = h; }
-		}
-	}
-	totCap += cap; totSummed += summed; totShared += shared;
-	const pct = (v) => (cap ? Math.round((v / cap) * 100) : 0);
-	console.log(`  ${area.padEnd(8)} cap ${String(cap).padStart(4)} | summed peaks ${String(summed).padStart(4)} = ${String(pct(summed)).padStart(3)}%`
-		+ ` | single hour ${String(shared).padStart(4)} = ${String(pct(shared)).padStart(3)}% at ${String(bestHour).padStart(2)}:00`);
+for (const [label, d] of [['walter', geojson.displacement], ['count', geojson.displacementCount]]) {
+	console.log(`Displacement [${label}]: ${d.removed_zones} removed zones lose ${d.removed_supply} spaces / ${d.removed_demand} cars at peak hour; ` +
+		`counted capacity ${d.absorb_capacity} (on-street ${d.absorb_onstreet} + off-street ${d.absorb_offstreet}) → ` +
+		`net vs demand ${d.net_vs_demand >= 0 ? '+' : ''}${d.net_vs_demand} (${d.absorbed}% absorbed)`);
 }
-console.log(`  ${'ALL'.padEnd(8)} cap ${String(totCap).padStart(4)} | summed peaks ${String(totSummed).padStart(4)} = ${Math.round(100 * totSummed / totCap)}%`
-	+ ` | single hour ${String(totShared).padStart(4)} = ${Math.round(100 * totShared / totCap)}% (each area at its own peak hour)`);
-const d = geojson.displacement;
-console.log(`Displacement: ${d.removed_zones} removed zones lose ${d.removed_supply} spaces / ${d.removed_demand} cars at peak hour; ` +
-	`counted capacity ${d.absorb_capacity} (yellow on-street ${d.absorb_onstreet} + off-street ${d.absorb_offstreet}; green ${d.absorb_green_surveyed} shown but excluded) → ` +
-	`net vs demand ${d.net_vs_demand >= 0 ? '+' : ''}${d.net_vs_demand}, vs supply ${d.net_vs_supply >= 0 ? '+' : ''}${d.net_vs_supply} (${d.absorbed}% absorbed)`);
-const ap = areaStats.all.profile;
-console.log(`Profile [all]: VAP ${ap.vap.length} hours (peak ${Math.max(...ap.vap.map(p => p[1]))}); ` +
-	`stay split ${ap.duration.shortPct}% ≤1h / ${ap.duration.errandPct}% 2–4h / ${ap.duration.workerPct}% 5–8h / ${ap.duration.alldayPct}% >8h, avg ${ap.duration.avg}h; ` +
-	`zoneProfiles: ${Object.keys(zoneProfiles).length}`);
+for (const [label, st] of [['walter', areaStats], ['count', areaStatsCount]]) {
+	const ap = st.all.profile;
+	console.log(`Profile [all, ${label}]: peak hour ${Math.max(...ap.vap.map(p => p[1]))} vehicles; ` +
+		`stay ${ap.duration.shortPct}% ≤1h / ${ap.duration.errandPct}% 1–4h / ${ap.duration.workerPct}% 4–8h / ${ap.duration.alldayPct}% >8h, avg ${ap.duration.avg}h`);
+}
 console.log(`Written ${GEOJSON_PATH} and ${YARDS_PATH}`);

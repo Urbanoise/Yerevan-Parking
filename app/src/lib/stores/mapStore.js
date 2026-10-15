@@ -28,3 +28,7 @@ export const fieldSurveyArea = writable('all');
 // Per-area, per-mode dashboard stat blocks, loaded from field-surveys.geojson's
 // `areaStats`. Shape: { all|malatia|kentron|garegin|mega|komitas|shiraz: { occupancy|paidfree|retained: [...] } }.
 export const fieldSurveyStats = writable(null);
+// Occupancy basis for the Field Surveys step. 'walter' (published, ADB reviewer's method
+// of 7 Oct 2026): half an hour in a vehicle's arrival and departure hours, a full hour
+// between. 'count': each hourly sighting counts a full hour (the 30 Sep 2026 basis).
+export const occupancyBasis = writable('walter');

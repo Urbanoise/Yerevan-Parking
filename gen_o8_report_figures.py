@@ -280,9 +280,10 @@ def fig10_peak_occupancy(f):
     title(ax, f"Occupancy at each area's busiest hour (all six areas "
               f"{f['all']['peak_hour_pct']}%)", pad=14)
     return save(fig, "fig10_peak_occupancy_by_area.png",
-                note="Distinct vehicles using the area's kerb during its busiest clock "
-                     "hour, divided by its capacity. Areas peak at different times, so "
-                     "each bar is read at its own hour; individual zones run higher.")
+                note="Average vehicles parked during the area's busiest clock hour, divided "
+                     "by its capacity; each vehicle counts half an hour in the hours it "
+                     "arrives and leaves. Areas peak at different times, so each bar is "
+                     "read at its own hour; individual zones run higher.")
 
 
 def fig11_hourly(f):
@@ -293,7 +294,7 @@ def fig11_hourly(f):
     colors = [RAMP[3] if i == peak else BLUE for i in range(len(cars))]
     fig, ax = plt.subplots(figsize=(6.4, 2.1))
     ax.bar(hours, cars, color=colors, width=0.74, zorder=3)
-    ax.annotate(f"peak {hours[peak]:02d}:00 · {cars[peak]:,} vehicles",
+    ax.annotate(f"peak {hours[peak]:02d}:00 · {round(cars[peak]):,} vehicles",
                 xy=(hours[peak], cars[peak]),
                 xytext=(hours[peak] + 1.2, cars[peak] + 190),
                 fontsize=8, color=INK, fontweight="bold",
@@ -302,8 +303,10 @@ def fig11_hourly(f):
     ax.set_xticks([7, 10, 13, 16, 19, 23])
     ax.set_xticklabels(["07:00", "10:00", "13:00", "16:00", "19:00", "23:00"],
                        fontsize=7.5, color=AXIS)
-    ax.set_yticks([0, 700, 1400])
-    ax.set_yticklabels(["0", "700", "1,400"], fontsize=7.5, color=AXIS)
+    step = 400 if max(cars) < 1200 else 700
+    ticks = list(range(0, int(max(cars) * 1.28), step))
+    ax.set_yticks(ticks)
+    ax.set_yticklabels([f"{t:,}" for t in ticks], fontsize=7.5, color=AXIS)
     ax.yaxis.grid(True, color=GRID, lw=0.8, zorder=0)
     ax.set_axisbelow(True)
     bare(ax)
@@ -312,8 +315,9 @@ def fig11_hourly(f):
 
 
 def fig12_stay_mix(f):
-    bins = [("1 hour or less", "shortPct"), ("1–2 hours", "errandPct"),
-            ("2–8 hours", "workerPct"), ("8 hours or more", "alldayPct")]
+    # the four bins of compute_field_survey_metrics.stayBin: ≤1 h, >1–4 h, >4–8 h, >8 h
+    bins = [("1 hour or less", "shortPct"), ("1–4 hours", "errandPct"),
+            ("4–8 hours", "workerPct"), ("more than 8 hours", "alldayPct")]
     fig, ax = plt.subplots(figsize=(6.4, 2.6))
     left = [0] * len(AREA_ORDER)
     y = list(range(len(AREA_ORDER)))

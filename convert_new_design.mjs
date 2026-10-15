@@ -3,7 +3,9 @@ import { inflateRawSync } from 'zlib';
 
 // Latest conceptual design. Google Earth now exports .kmz (a zip holding doc.kml);
 // a bare .kml path still works, so older exports can be re-run by changing this line.
-const SOURCE = 'Parking New Design/New Design Parking 23072026 v2.kmz';
+// v3 = v2 plus Bagratuniats N03–N06 (32 spaces of unmarked kerb the v2 drawings leave
+// for parking, raised in the ADB memo of 7 Oct 2026).
+const SOURCE = 'Parking New Design/New Design Parking 15102026 v3.kmz';
 
 // --- minimal KMZ (zip) reader -------------------------------------------------
 // A KMZ is a zip with one doc.kml inside. Rather than take a dependency for it, we
@@ -112,7 +114,7 @@ for (const fm of folderMatches) {
 // Ordering is spaces DESC then name ASC. The name tiebreak matters: when the cut falls
 // inside a run of equal-sized paths, only some of them are decremented, and without a
 // deterministic tiebreak which ones would drift with KMZ placemark order.
-const TARGET = { 'Corridor 1': 869, 'Corridor 2': 351 };
+const TARGET = { 'Corridor 1': 901, 'Corridor 2': 351 };  // C1 869 + 32 (Bagratuniats N03–N06)
 for (const [folder, target] of Object.entries(TARGET)) {
 	const rows = features
 		.filter(f => f.properties.folder === folder && f.properties.spaces != null)

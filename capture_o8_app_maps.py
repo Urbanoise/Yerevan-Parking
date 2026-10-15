@@ -7,7 +7,8 @@ Usage: python capture_o8_app_maps.py [view ...]
 """
 import json, os, re, sys, time
 from playwright.sync_api import sync_playwright
-OUT = r"C:/Users/user/Yerevan-Parking/Final Presentation/SEP'26/O8 app maps/raw/"
+# O8_MAPS_DIR picks the round's folder (default: the Sep 2026 one these were built for).
+OUT = os.environ.get("O8_MAPS_DIR", r"C:/Users/user/Yerevan-Parking/Final Presentation/SEP'26/O8 app maps") + "/raw/"
 DATA = "C:/Users/user/Yerevan-Parking/app/static/data/wgs84/"
 
 def bounds(feats):
@@ -46,8 +47,9 @@ for a in AREAS:
 
 def patch(route):
     r = route.fetch(); body = r.text()
-    body = body.replace("return e=new q.default.Map({",
-                        "return window.__map=e=new q.default.Map({preserveDrawingBuffer:true,")
+    # the minifier renames the maplibre import between builds (q, m, ...), so match any
+    body = re.sub(r"return (\w)=new (\w)\.default\.Map\(\{",
+                  r"return window.__map=\1=new \2.default.Map({preserveDrawingBuffer:true,", body, count=1)
     route.fulfill(response=r, body=body)
 
 def settle(pg):

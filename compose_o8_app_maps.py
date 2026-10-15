@@ -1,7 +1,8 @@
 """Output 8 (Sep 2026): legends, area labels and the occupancy grid for the app prints."""
 import json
 from PIL import Image, ImageDraw, ImageFont
-D = r"C:/Users/user/Yerevan-Parking/Final Presentation/SEP'26/O8 app maps/raw/"
+import os
+D = os.environ.get("O8_MAPS_DIR", r"C:/Users/user/Yerevan-Parking/Final Presentation/SEP'26/O8 app maps") + "/raw/"
 O = D + "../"
 import os; os.makedirs(O, exist_ok=True)
 
